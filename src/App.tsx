@@ -46,6 +46,10 @@ function App() {
       return;
     }
 
+    if (!settings.autoOpen && !settings.webPush) {
+      return;
+    }
+
     const reminder: Reminder = {
       id: crypto.randomUUID(),
       url: tab.url,

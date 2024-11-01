@@ -1,6 +1,6 @@
 import { Reminder } from "./types/types";
 
-let openedReminders = new Set();
+const openedReminders = new Set();
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   try {
@@ -71,7 +71,7 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
   }
 
   const updatedReminders = webpushData.find((r: Reminder) => {
-    new Date(r.reminderTime).getTime() > Date.now();
+    return new Date(r.reminderTime).getTime() > Date.now();
   });
 
   await chrome.storage.local.set({ webpushdata: updatedReminders });

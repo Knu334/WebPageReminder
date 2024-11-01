@@ -13,12 +13,14 @@ export const ReminderList: React.FC<{
     <div className="space-y-4">
       {reminders
         .sort((a, b) => {
-          if (a.reminderTime === b.reminderTime) {
+          const aDate = new Date(a.reminderTime);
+          const bDate = new Date(b.reminderTime);
+          if (aDate === bDate) {
             return 0;
-          } else if (a.reminderTime > b.reminderTime) {
-            return 1;
-          } else {
+          } else if (aDate < bDate) {
             return -1;
+          } else {
+            return 1;
           }
         })
         .map((reminder) => (

@@ -63,9 +63,7 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
 
   console.log(webpushData.length);
 
-  const reminder = webpushData.find(
-    (r: Reminder) => r.id === notificationId
-  );
+  const reminder = webpushData.find((r: Reminder) => r.id === notificationId);
   if (reminder) {
     chrome.tabs.create({ url: reminder.url });
   }

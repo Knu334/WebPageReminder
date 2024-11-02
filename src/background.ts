@@ -58,7 +58,6 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 chrome.notifications.onClicked.addListener(async (notificationId) => {
   const data = await chrome.storage.local.get("webpushdata");
-
   const webpushData = data.webpushdata || [];
 
   console.log(webpushData.length);
@@ -66,13 +65,13 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
   const reminder = webpushData.find((r: Reminder) => r.id === notificationId);
   if (reminder) {
     chrome.tabs.create({ url: reminder.url });
+    chrome.notifications.clear(notificationId);
   }
 
-  const updatedReminders = webpushData.find((r: Reminder) => {
+  const updatedReminders = webpushData.filter((r: Reminder) => {
     return new Date(r.reminderTime).getTime() > Date.now();
   });
-
-  await chrome.storage.local.set({ webpushdata: updatedReminders });
+  chrome.storage.local.set({ webpushdata: updatedReminders });
 });
 
 // 拡張機能インストール/更新時の初期化

@@ -22,8 +22,16 @@ function App() {
   useEffect(() => {
     // Load saved reminders and settings
     chrome.storage.local.get(["reminders", "settings"], (result) => {
-      if (result.reminders) setReminders(result.reminders);
-      if (result.settings) setSettings(result.settings);
+      const savedReminders: Reminder[] = result.reminders || [];
+      const savedSettings: SettingsType = result.settings;
+      const updatedReminders: Reminder[] = savedReminders.filter(
+        (r: Reminder) => {
+          return new Date(r.reminderTime).getTime() > Date.now();
+        }
+      );
+      chrome.storage.local.set({ reminders: updatedReminders });
+      setReminders(updatedReminders);
+      if (savedSettings) setSettings(savedSettings);
     });
   }, []);
 

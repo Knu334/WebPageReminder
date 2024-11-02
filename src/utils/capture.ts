@@ -7,7 +7,7 @@ export const captureVisibleTab = async (): Promise<string> => {
     if (!tab.id) return "";
 
     const dataUrl = await chrome.tabs.captureVisibleTab({
-      format: "png",
+      format: "jpeg",
       quality: 50,
     });
     return dataUrl;

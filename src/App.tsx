@@ -1,14 +1,15 @@
 import { useState, useEffect } from "react";
-import { DateTimePicker } from "./components/DateTimePicker";
+import { DateTimePicker } from "@/components/DateTimePicker";
 import { Settings } from "@/components/Settings";
-import { ReminderList } from "./components/ReminderList";
-import { Reminder, SettingsType } from "./types/types";
-import { captureVisibleTab } from "./utils/capture";
+import { ReminderList } from "@/components/ReminderList";
+import { Reminder, SettingsType } from "@/types/types";
+import { captureVisibleTab } from "@/utils/capture";
 import { createZeroSecCurrentDate } from "@/utils/dateUtils";
-import { Button } from "./components/ui/button";
-import { Label } from "./components/ui/label";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 
-import "./App.css";
+import "@/App.css";
 
 function App() {
   const [reminderTime, setReminderTime] = useState(createZeroSecCurrentDate());
@@ -21,8 +22,16 @@ function App() {
   useEffect(() => {
     // Load saved reminders and settings
     chrome.storage.local.get(["reminders", "settings"], (result) => {
-      if (result.reminders) setReminders(result.reminders);
-      if (result.settings) setSettings(result.settings);
+      const savedReminders: Reminder[] = result.reminders || [];
+      const savedSettings: SettingsType = result.settings;
+      const updatedReminders: Reminder[] = savedReminders.filter(
+        (r: Reminder) => {
+          return new Date(r.reminderTime).getTime() > Date.now();
+        }
+      );
+      chrome.storage.local.set({ reminders: updatedReminders });
+      setReminders(updatedReminders);
+      if (savedSettings) setSettings(savedSettings);
     });
   }, []);
 
@@ -35,13 +44,17 @@ function App() {
 
     if (reminderTime.getTime() <= Date.now()) {
       console.log("Past date cannot be set.");
-      let status = document.getElementById("status");
+      const status = document.getElementById("status");
       if (status) {
         status.hidden = false;
         setTimeout(() => {
           status.hidden = true;
         }, 3000);
       }
+      return;
+    }
+
+    if (!settings.autoOpen && !settings.webPush) {
       return;
     }
 
@@ -89,32 +102,38 @@ function App() {
   };
 
   return (
-    <div className="w-96 p-4 space-y-6">
-      <div className="space-y-4">
-        <DateTimePicker value={reminderTime} onChange={setReminderTime} />
-        <Button onClick={handleAddReminder} className="w-full">
-          Create Reminder
-        </Button>
-      </div>
+    <ScrollArea className="w-root">
+      <div className="h-root pt-6 px-6 space-y-6">
+        <div className="space-y-4">
+          <DateTimePicker value={reminderTime} onChange={setReminderTime} />
+          <Button onClick={handleAddReminder} className="w-full">
+            Create Reminder
+          </Button>
+        </div>
 
-      <Label id="status" className="text-red-500" hidden={true}>
-        Past date cannot be set.
-      </Label>
+        <Label id="status" className="text-red-500" hidden={true}>
+          Past date cannot be set.
+        </Label>
 
-      <div className="space-y-2">
-        <h2 className="text-lg font-semibold">Settings</h2>
-        <Settings settings={settings} onSettingsChange={handleSettingsChange} />
-      </div>
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold">Settings</h2>
+          <Settings
+            settings={settings}
+            onSettingsChange={handleSettingsChange}
+          />
+        </div>
 
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold">Reminders</h2>
-        <ReminderList
-          reminders={reminders}
-          onDelete={handleDeleteReminder}
-          onOpen={handleOpenReminder}
-        />
+        <div className="pb-6 space-y-4">
+          <h2 className="text-lg font-semibold">Reminders</h2>
+          <ReminderList
+            reminders={reminders}
+            onDelete={handleDeleteReminder}
+            onOpen={handleOpenReminder}
+          />
+        </div>
       </div>
-    </div>
+      <ScrollBar orientation="vertical" />
+    </ScrollArea>
   );
 }
 

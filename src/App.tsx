@@ -4,6 +4,7 @@ import { Settings } from "@/components/Settings";
 import { ReminderList } from "@/components/ReminderList";
 import { Reminder, SettingsType } from "@/types/types";
 import { captureVisibleTab } from "@/utils/capture";
+import { delNodata, getNodata } from "@/utils/noDataUtils";
 import { createZeroSecCurrentDate } from "@/utils/dateUtils";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -71,7 +72,8 @@ function App() {
 
     console.log(reminder);
 
-    const updatedReminders = [...reminders, reminder];
+    let updatedReminders = [...reminders, reminder];
+    updatedReminders = delNodata(updatedReminders);
     setReminders(updatedReminders);
     chrome.storage.local.set({ reminders: updatedReminders });
     if (settings.webPush) {
@@ -86,6 +88,9 @@ function App() {
 
   const handleDeleteReminder = (id: string) => {
     const updatedReminders = reminders.filter((r) => r.id !== id);
+    if (updatedReminders.length === 0) {
+      updatedReminders.push(getNodata());
+    }
     setReminders(updatedReminders);
     chrome.storage.local.set({ reminders: updatedReminders });
     chrome.storage.local.set({ webpush_data: updatedReminders });
@@ -123,7 +128,7 @@ function App() {
           />
         </div>
 
-        <div className="pb-6 space-y-4">
+        <div className="pb-6 space-y-4 grid justify-center">
           <h2 className="text-lg font-semibold">Reminders</h2>
           <ReminderList
             reminders={reminders}

@@ -10,6 +10,7 @@ export const NO_DATA = {
   autoOpen: false,
   webPush: false,
   createdAt: new Date().toISOString(),
+  aaa: ""
 } as const satisfies Reminder;
 
 export const delNodata = (reminders: Reminder[]): Reminder[] => {

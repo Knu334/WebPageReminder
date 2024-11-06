@@ -4,7 +4,7 @@ import nodataImg from "@/resources/no-data.png";
 export const NO_DATA = {
   id: "Nodata",
   url: "Nodata",
-  title: "Nodata",
+  title: "Nodataaa",
   thumbnail: nodataImg,
   reminderTime: "9999-12-31 23:59:59",
   autoOpen: false,

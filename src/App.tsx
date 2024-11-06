@@ -4,7 +4,7 @@ import { Settings } from "@/components/Settings";
 import { ReminderList } from "@/components/ReminderList";
 import { Reminder, SettingsType } from "@/types/types";
 import { captureVisibleTab } from "@/utils/capture";
-import { delNodata, getNodata } from "@/utils/noDataUtils";
+import { delNodata, NO_DATA } from "@/utils/noDataUtils";
 import { createZeroSecCurrentDate } from "@/utils/dateUtils";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -89,7 +89,7 @@ function App() {
   const handleDeleteReminder = (id: string) => {
     const updatedReminders = reminders.filter((r) => r.id !== id);
     if (updatedReminders.length === 0) {
-      updatedReminders.push(getNodata());
+      updatedReminders.push(NO_DATA);
     }
     setReminders(updatedReminders);
     chrome.storage.local.set({ reminders: updatedReminders });

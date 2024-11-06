@@ -1,7 +1,7 @@
 import { Reminder } from "@/types/types";
 import nodataImg from "@/resources/no-data.png";
 
-const nodata: Reminder = {
+export const NO_DATA = {
   id: "Nodata",
   url: "Nodata",
   title: "Nodata",
@@ -10,12 +10,8 @@ const nodata: Reminder = {
   autoOpen: false,
   webPush: false,
   createdAt: new Date().toISOString(),
-};
-
-export const getNodata = (): Reminder => {
-  return nodata;
-};
+} as const satisfies Reminder;
 
 export const delNodata = (reminders: Reminder[]): Reminder[] => {
-  return reminders.filter((r: Reminder) => r.id !== nodata.id);
+  return reminders.filter((r: Reminder) => r.id !== NO_DATA.id);
 };

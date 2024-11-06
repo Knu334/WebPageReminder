@@ -2,6 +2,17 @@ import { Reminder } from "./types/types";
 
 const openedReminders = new Set();
 
+const NO_DATA = {
+  id: "Nodata",
+  url: "Nodata",
+  title: "Nodata",
+  thumbnail: "/assets/no-data.png",
+  reminderTime: "9999-12-31 23:59:59",
+  autoOpen: false,
+  webPush: false,
+  createdAt: new Date().toISOString(),
+} as const satisfies Reminder;
+
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   try {
     // 重複実行を防ぐ
@@ -45,6 +56,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     const updatedReminders = reminders.filter(
       (r: Reminder) => r.id.toString() !== alarm.name
     );
+    if (updatedReminders.length === 0) {
+      updatedReminders.push(NO_DATA);
+    }
     await chrome.storage.local.set({ reminders: updatedReminders });
 
     // 処理済みセットからも削除

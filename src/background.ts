@@ -11,6 +11,7 @@ const NO_DATA = {
   autoOpen: false,
   webPush: false,
   createdAt: new Date().toISOString(),
+  hidden: false,
 } as const satisfies Reminder;
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {

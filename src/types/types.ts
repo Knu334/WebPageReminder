@@ -7,9 +7,15 @@ export interface Reminder {
   autoOpen: boolean;
   webPush: boolean;
   createdAt: string;
+  hidden: boolean;
 }
 
 export interface SettingsType {
   autoOpen: boolean;
   webPush: boolean;
+}
+
+export interface StoragePayloadType {
+  key: string;
+  reminders: Reminder[];
 }

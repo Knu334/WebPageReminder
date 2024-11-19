@@ -13,6 +13,8 @@ export interface Reminder {
 export interface SettingsType {
   autoOpen: boolean;
   webPush: boolean;
+  connectionType: string;
+  url: string;
 }
 
 export interface StoragePayloadType {

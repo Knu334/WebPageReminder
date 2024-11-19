@@ -2,74 +2,88 @@ import { useState, useEffect } from "react";
 import { DateTimePicker } from "@/components/DateTimePicker";
 import { Settings } from "@/components/Settings";
 import { ReminderList } from "@/components/ReminderList";
-import { Reminder, SettingsType, StoragePayloadType } from "@/types/types";
-import { captureVisibleTab } from "@/utils/capture";
-import { delNodata, NO_DATA } from "@/utils/noDataUtils";
-import { createZeroSecCurrentDate } from "@/utils/dateUtils";
+import {
+  captureVisibleTab,
+  createZeroSecCurrentDate,
+  NO_DATA,
+  ReminderUtils,
+  removeOldReminders,
+  resetAlerm,
+} from "@/utils/ReminderUtils";
+import { Reminder, SettingsType } from "@/types/types";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
 import "@/App.css";
-import axios, { CreateAxiosDefaults } from "axios";
 
 function App() {
-  const [reminderTime, setReminderTime] = useState(createZeroSecCurrentDate());
+  const [reminderTime, setReminderTime] = useState(createZeroSecCurrentDate);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [settings, setSettings] = useState<SettingsType>({
     autoOpen: true,
     webPush: false,
+    connectionType: "local",
+    url: "http://localhost:3000",
   });
-  const [userId, setUserId] = useState<string>("");
-
-  const axiosConfig: CreateAxiosDefaults = {
-    baseURL: "http://localhost:3000",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Requested-With": "XMLHttpRequest",
-    },
-    responseType: "json",
-  };
-  const axiosBase = axios.create(axiosConfig);
 
   useEffect(() => {
     // Load saved reminders and settings
-    const updateReminders = async () => {
-      const userInfo = await chrome.identity.getProfileUserInfo({
-        accountStatus: chrome.identity.AccountStatus.ANY,
-      });
-      setUserId(userInfo.id);
-      console.log("userInfo: " + JSON.stringify(userInfo));
-      const storageResponse = await axiosBase.post("/reminders", {
-        key: userInfo.id,
-      });
-      const storageReminders: Reminder[] = storageResponse.data || [];
-      console.log(storageReminders);
-      for (const r of storageReminders) {
-        if (new Date(r.reminderTime).getTime() < Date.now()) {
-          r.hidden = true;
-        }
-      }
-      const payload: StoragePayloadType = {
-        key: userInfo.id,
-        reminders: storageReminders,
+    (async () => {
+      const storage = chrome.storage
+        ? await chrome.storage.local.get(["settings", "reminders"])
+        : {};
+      let localSettings: SettingsType = storage.settings || {
+        autoOpen: true,
+        webPush: false,
+        connectionType: "local",
+        url: "http://localhost:3000",
       };
-      axiosBase.put("/reminders", payload);
-      setReminders(storageReminders);
-    };
-    updateReminders();
+      if (localSettings) setSettings(localSettings);
 
-    chrome.storage.local.get(["settings"], (result) => {
-      const savedSettings: SettingsType = result.settings;
-      if (savedSettings) setSettings(savedSettings);
-    });
-  }, []);
+      if (!chrome.storage) {
+        setSettings({ ...localSettings, connectionType: "server" });
+      }
+
+      let storageReminders: Reminder[] = [];
+      if (localSettings.connectionType === "server" || !chrome.storage) {
+        try {
+          const utils = new ReminderUtils(localSettings.url);
+          storageReminders = await utils.getRemoteReminders();
+          storageReminders = removeOldReminders(storageReminders);
+          await utils.setRemoteReminders(storageReminders);
+        } catch (error) {
+          if (chrome.storage) {
+            storageReminders = storage.reminders || [];
+            localSettings = { ...localSettings, connectionType: "local" };
+            setSettings(localSettings);
+            await chrome.storage.local.set({ settings: localSettings });
+          }
+          console.log(error);
+        }
+      } else if (chrome.storage) {
+        storageReminders = storage.reminders || [];
+        storageReminders = removeOldReminders(storageReminders);
+        await chrome.storage.local.set({ reminders: storageReminders });
+      }
+      if (storageReminders.length === 0) {
+        storageReminders.push(NO_DATA);
+      }
+      setReminders(storageReminders);
+      resetAlerm(storageReminders);
+    })();
+  }, [settings.connectionType]);
 
   const handleAddReminder = async () => {
-    const [tab] = await chrome.tabs.query({
-      active: true,
-      currentWindow: true,
-    });
+    let tab;
+    if (chrome.tabs) {
+      [tab] = await chrome.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+    } else {
+      tab = { url: "http://localhost", title: "Test" };
+    }
     if (!tab.url || !tab.title) return;
 
     if (reminderTime.getTime() <= Date.now()) {
@@ -92,7 +106,7 @@ function App() {
       id: crypto.randomUUID(),
       url: tab.url,
       title: tab.title,
-      thumbnail: await captureVisibleTab(),
+      thumbnail: (await captureVisibleTab()) || NO_DATA.thumbnail,
       reminderTime: reminderTime.toISOString(),
       autoOpen: settings.autoOpen,
       webPush: settings.webPush,
@@ -100,24 +114,26 @@ function App() {
       hidden: false,
     };
 
-    console.log(reminder);
-
-    let updatedReminders = [...reminders, reminder];
-    updatedReminders = delNodata(updatedReminders);
+    let updatedReminders;
+    if (reminders[0].id === NO_DATA.id) {
+      updatedReminders = [reminder];
+    } else {
+      updatedReminders = [...reminders, reminder];
+    }
     setReminders(updatedReminders);
-    const payload: StoragePayloadType = {
-      key: userId,
-      reminders: updatedReminders,
-    };
-    axiosBase.put("/reminders", payload);
-    if (settings.webPush) {
-      chrome.storage.local.set({ webpushdata: updatedReminders });
+    if (settings.connectionType === "server" || !chrome.storage) {
+      const utils = new ReminderUtils(settings.url);
+      utils.setRemoteReminders(updatedReminders);
+    } else {
+      chrome.storage.local.set({ reminders: updatedReminders });
     }
 
     // Set up alarm for the reminder
-    chrome.alarms.create(reminder.id, {
-      when: reminderTime.getTime(),
-    });
+    if (chrome.alarms) {
+      chrome.alarms.create(reminder.id, {
+        when: reminderTime.getTime(),
+      });
+    }
   };
 
   const handleDeleteReminder = (id: string) => {
@@ -126,13 +142,15 @@ function App() {
       updatedReminders.push(NO_DATA);
     }
     setReminders(updatedReminders);
-    const payload: StoragePayloadType = {
-      key: userId,
-      reminders: updatedReminders,
-    };
-    axiosBase.put("/reminders", payload);
-    chrome.storage.local.set({ webpush_data: updatedReminders });
-    chrome.alarms.clear(id);
+    if (settings.connectionType === "server" || !chrome.storage) {
+      const utils = new ReminderUtils(settings.url);
+      utils.setRemoteReminders(updatedReminders);
+    } else {
+      chrome.storage.local.set({ reminders: updatedReminders });
+    }
+    if (chrome.alarms) {
+      chrome.alarms.clear(id);
+    }
   };
 
   const handleOpenReminder = (url: string) => {
@@ -141,7 +159,9 @@ function App() {
 
   const handleSettingsChange = (newSettings: SettingsType) => {
     setSettings(newSettings);
-    chrome.storage.local.set({ settings: newSettings });
+    if (chrome.storage) {
+      chrome.storage.local.set({ settings: newSettings });
+    }
   };
 
   return (

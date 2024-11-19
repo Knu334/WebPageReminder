@@ -36,7 +36,7 @@ export const ReminderList: React.FC<{
               }
             })
             .map((reminder) => (
-              <CarouselItem>
+              <CarouselItem key={reminder.id}>
                 <Card
                   key={reminder.id}
                   className="hover:bg-gray-50 cursor-pointer"

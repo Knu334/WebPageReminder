@@ -24,13 +24,17 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     openedReminders.add(alarm.name);
 
     const data = await chrome.storage.local.get(["reminders"]);
-    const reminders = data.reminders || [];
+    const reminders = data.reminders || [NO_DATA];
 
     const reminder = reminders.find(
       (r: Reminder) => r.id.toString() === alarm.name
     );
 
     if (!reminder) {
+      // 処理済みセットからも削除
+      setTimeout(() => {
+        openedReminders.delete(alarm.name);
+      }, 5000);
       return;
     }
 
@@ -54,13 +58,8 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     }
 
     // リマインダーを削除
-    const updatedReminders = reminders.filter(
-      (r: Reminder) => r.id.toString() !== alarm.name
-    );
-    if (updatedReminders.length === 0) {
-      updatedReminders.push(NO_DATA);
-    }
-    await chrome.storage.local.set({ reminders: updatedReminders });
+    reminder.hidden = true;
+    await chrome.storage.local.set({ reminders: reminders });
 
     // 処理済みセットからも削除
     setTimeout(() => {
@@ -72,21 +71,14 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 });
 
 chrome.notifications.onClicked.addListener(async (notificationId) => {
-  const data = await chrome.storage.local.get("webpushdata");
-  const webpushData = data.webpushdata || [];
+  const data = await chrome.storage.local.get("reminders");
+  const reminders: Reminder[] = data.reminders || [];
 
-  console.log(webpushData.length);
-
-  const reminder = webpushData.find((r: Reminder) => r.id === notificationId);
+  const reminder = reminders.find((r) => r.id === notificationId);
   if (reminder) {
     chrome.tabs.create({ url: reminder.url });
     chrome.notifications.clear(notificationId);
   }
-
-  const updatedReminders = webpushData.filter((r: Reminder) => {
-    return new Date(r.reminderTime).getTime() > Date.now();
-  });
-  chrome.storage.local.set({ webpushdata: updatedReminders });
 });
 
 // 拡張機能インストール/更新時の初期化

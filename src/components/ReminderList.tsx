@@ -39,7 +39,7 @@ export const ReminderList: React.FC<{
               <CarouselItem key={reminder.id}>
                 <Card
                   key={reminder.id}
-                  className="hover:bg-gray-50 cursor-pointer"
+                  className="hover:bg-card-hover cursor-pointer"
                 >
                   <CardContent className="p-4 relative">
                     <Button
@@ -96,8 +96,8 @@ export const ReminderList: React.FC<{
               </CarouselItem>
             ))}
         </CarouselContent>
-        <CarouselPrevious className="ml-2" />
-        <CarouselNext className="mr-2" />
+        <CarouselPrevious />
+        <CarouselNext />
       </Carousel>
     </div>
   );

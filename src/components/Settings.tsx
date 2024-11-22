@@ -60,7 +60,6 @@ export const Settings: React.FC<{
         <Input
           type="url"
           value={settings.url}
-          disabled={settings.connectionType === "local"}
           onChange={(e) => {
             onSettingsChange({ ...settings, url: e.target.value });
           }}

@@ -11,7 +11,7 @@ import {
   resetAlerm,
 } from "@/utils/ReminderUtils";
 import { Reminder, SettingsType } from "@/types/types";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
@@ -165,19 +165,39 @@ function App() {
   };
 
   return (
-    <ScrollArea className="w-root">
-      <div className="h-root pt-6 px-6 space-y-6">
-        <div className="space-y-4">
-          <DateTimePicker value={reminderTime} onChange={setReminderTime} />
-          <Button onClick={handleAddReminder} className="w-full">
-            Create Reminder
-          </Button>
+    <Tabs defaultValue="reminders" className="w-root m-4 space-y-6">
+      <TabsList className="w-full">
+        <TabsTrigger value="reminders" className="w-full">
+          Reminders
+        </TabsTrigger>
+        <TabsTrigger value="settings" className="w-full">
+          Settings
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="reminders">
+        <div className="space-y-6">
+          <div className="space-y-4">
+            <DateTimePicker value={reminderTime} onChange={setReminderTime} />
+            <Button onClick={handleAddReminder} className="w-full">
+              Create Reminder
+            </Button>
+          </div>
+
+          <Label id="status" className="text-red-500" hidden={true}>
+            Past date cannot be set.
+          </Label>
+
+          <div className="space-y-4 grid justify-center">
+            <h2 className="text-lg font-semibold">Reminders</h2>
+            <ReminderList
+              reminders={reminders}
+              onDelete={handleDeleteReminder}
+              onOpen={handleOpenReminder}
+            />
+          </div>
         </div>
-
-        <Label id="status" className="text-red-500" hidden={true}>
-          Past date cannot be set.
-        </Label>
-
+      </TabsContent>
+      <TabsContent value="settings">
         <div className="space-y-2">
           <h2 className="text-lg font-semibold">Settings</h2>
           <Settings
@@ -185,18 +205,8 @@ function App() {
             onSettingsChange={handleSettingsChange}
           />
         </div>
-
-        <div className="pb-6 space-y-4 grid justify-center">
-          <h2 className="text-lg font-semibold">Reminders</h2>
-          <ReminderList
-            reminders={reminders}
-            onDelete={handleDeleteReminder}
-            onOpen={handleOpenReminder}
-          />
-        </div>
-      </div>
-      <ScrollBar orientation="vertical" />
-    </ScrollArea>
+      </TabsContent>
+    </Tabs>
   );
 }
 

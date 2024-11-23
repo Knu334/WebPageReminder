@@ -5,6 +5,7 @@ import { ReminderList } from "@/components/ReminderList";
 import {
   captureVisibleTab,
   createZeroSecCurrentDate,
+  DEFAULT_SETTINGS,
   ReminderUtils,
   removeOldReminders,
 } from "@/utils/ReminderUtils";
@@ -19,12 +20,7 @@ import "@/App.css";
 function App() {
   const [reminderTime, setReminderTime] = useState(createZeroSecCurrentDate);
   const [reminders, setReminders] = useState<Reminder[]>([]);
-  const [settings, setSettings] = useState<SettingsType>({
-    autoOpen: true,
-    webPush: false,
-    connectionType: "local",
-    url: "http://localhost:3000",
-  });
+  const [settings, setSettings] = useState<SettingsType>(DEFAULT_SETTINGS);
 
   useEffect(() => {
     // Load saved reminders and settings
@@ -32,12 +28,7 @@ function App() {
       const storage = chrome.storage
         ? await chrome.storage.local.get(["settings", "reminders"])
         : {};
-      let localSettings: SettingsType = storage.settings || {
-        autoOpen: true,
-        webPush: false,
-        connectionType: "local",
-        url: "http://localhost:3000",
-      };
+      let localSettings: SettingsType = storage.settings || DEFAULT_SETTINGS;
       if (localSettings) setSettings(localSettings);
 
       if (!chrome.storage) {
@@ -138,17 +129,19 @@ function App() {
 
   const handleDeleteReminder = (id: string) => {
     const newReminders = reminders.filter((r) => r.id !== id);
-    const activeReminders = newReminders.filter((r) => !r.hidden);
-    if (activeReminders.length === 0) {
-      newReminders.push(NO_DATA);
-    }
-    setReminders(newReminders);
     if (settings.connectionType === "server" || !chrome.storage) {
       const utils = new ReminderUtils(settings.url);
       utils.setRemoteReminders(newReminders);
     } else {
       chrome.storage.local.set({ reminders: newReminders });
     }
+
+    const activeReminders = newReminders.filter((r) => !r.hidden);
+    if (activeReminders.length === 0) {
+      newReminders.push(NO_DATA);
+    }
+    setReminders(newReminders);
+
     if (chrome.alarms) {
       chrome.alarms.clear(id);
     }

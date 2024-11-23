@@ -1,4 +1,4 @@
-import { Reminder, StoragePayloadType } from "@/types/types";
+import { Reminder, SettingsType, StoragePayloadType } from "@/types/types";
 import axios, { AxiosInstance, CreateAxiosDefaults } from "axios";
 
 export class ReminderUtils {
@@ -95,3 +95,10 @@ export const createZeroSecCurrentDate = (): Date => {
   current.setMilliseconds(0);
   return current;
 };
+
+export const DEFAULT_SETTINGS = {
+  autoOpen: true,
+  webPush: false,
+  connectionType: "server",
+  url: "http://localhost:3000",
+} as const satisfies SettingsType;

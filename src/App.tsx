@@ -5,11 +5,10 @@ import { ReminderList } from "@/components/ReminderList";
 import {
   captureVisibleTab,
   createZeroSecCurrentDate,
-  NO_DATA,
   ReminderUtils,
   removeOldReminders,
-  resetAlerm,
 } from "@/utils/ReminderUtils";
+import { NO_DATA, resetAlerm } from "./utils/nodataUtils";
 import { Reminder, SettingsType } from "@/types/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -114,18 +113,19 @@ function App() {
       hidden: false,
     };
 
-    let updatedReminders;
-    if (reminders[0].id === NO_DATA.id) {
-      updatedReminders = [reminder];
+    let newReminders;
+    const activeReminders = reminders.filter((r) => !r.hidden);
+    if (activeReminders.length === 1 && activeReminders[0].id === NO_DATA.id) {
+      newReminders = [reminder];
     } else {
-      updatedReminders = [...reminders, reminder];
+      newReminders = [...reminders, reminder];
     }
-    setReminders(updatedReminders);
+    setReminders(newReminders);
     if (settings.connectionType === "server" || !chrome.storage) {
       const utils = new ReminderUtils(settings.url);
-      utils.setRemoteReminders(updatedReminders);
+      utils.setRemoteReminders(newReminders);
     } else {
-      chrome.storage.local.set({ reminders: updatedReminders });
+      chrome.storage.local.set({ reminders: newReminders });
     }
 
     // Set up alarm for the reminder
@@ -137,16 +137,17 @@ function App() {
   };
 
   const handleDeleteReminder = (id: string) => {
-    const updatedReminders = reminders.filter((r) => r.id !== id);
-    if (updatedReminders.length === 0) {
-      updatedReminders.push(NO_DATA);
+    const newReminders = reminders.filter((r) => r.id !== id);
+    const activeReminders = newReminders.filter((r) => !r.hidden);
+    if (activeReminders.length === 0) {
+      newReminders.push(NO_DATA);
     }
-    setReminders(updatedReminders);
+    setReminders(newReminders);
     if (settings.connectionType === "server" || !chrome.storage) {
       const utils = new ReminderUtils(settings.url);
-      utils.setRemoteReminders(updatedReminders);
+      utils.setRemoteReminders(newReminders);
     } else {
-      chrome.storage.local.set({ reminders: updatedReminders });
+      chrome.storage.local.set({ reminders: newReminders });
     }
     if (chrome.alarms) {
       chrome.alarms.clear(id);

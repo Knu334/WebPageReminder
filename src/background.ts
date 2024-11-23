@@ -1,4 +1,5 @@
-import { Reminder } from "./types/types";
+import { Reminder } from "@/types/types";
+import { ReminderUtils } from "@/utils/ReminderUtils";
 
 const openedReminders = new Set();
 
@@ -23,14 +24,26 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     }
     openedReminders.add(alarm.name);
 
-    const data = await chrome.storage.local.get(["reminders"]);
-    const reminders = data.reminders || [NO_DATA];
+    const data = await chrome.storage.local.get(["reminders", "settings"]);
+    let reminders: Reminder[];
+    const settings = data.settings || {
+      connectionType: "local",
+      url: "http://localhost:3000",
+    };
+    const utils = new ReminderUtils(settings.url);
+
+    if (settings.connectionType === "local") {
+      reminders = data.reminders || [];
+    } else {
+      reminders = await utils.getRemoteReminders();
+    }
 
     const reminder = reminders.find(
       (r: Reminder) => r.id.toString() === alarm.name
     );
 
     if (!reminder) {
+      console.log("Reminder not found.");
       // 処理済みセットからも削除
       setTimeout(() => {
         openedReminders.delete(alarm.name);
@@ -59,7 +72,23 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
     // リマインダーを削除
     reminder.hidden = true;
-    await chrome.storage.local.set({ reminders: reminders });
+    reminder.thumbnail = "";
+    // reminders = reminders.filter((r) => r.id !== reminder.id);
+    // reminders = [...reminders, reminder];
+
+    const activeReminder = reminders.find(
+      (r) => r.id !== NO_DATA.id && !r.hidden
+    );
+
+    if (!activeReminder) {
+      reminders = [...reminders, NO_DATA];
+    }
+
+    if (settings.connectionType === "local") {
+      await chrome.storage.local.set({ reminders: reminders });
+    } else {
+      await utils.setRemoteReminders(reminders);
+    }
 
     // 処理済みセットからも削除
     setTimeout(() => {

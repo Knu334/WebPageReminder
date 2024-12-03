@@ -73,8 +73,6 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     // リマインダーを削除
     reminder.hidden = true;
     reminder.thumbnail = "";
-    // reminders = reminders.filter((r) => r.id !== reminder.id);
-    // reminders = [...reminders, reminder];
 
     const activeReminder = reminders.find(
       (r) => r.id !== NO_DATA.id && !r.hidden
@@ -100,8 +98,19 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 });
 
 chrome.notifications.onClicked.addListener(async (notificationId) => {
-  const data = await chrome.storage.local.get("reminders");
-  const reminders: Reminder[] = data.reminders || [];
+  const data = await chrome.storage.local.get(["reminders", "settings"]);
+  let reminders: Reminder[];
+  const settings = data.settings || {
+    connectionType: "local",
+    url: "http://localhost:3000",
+  };
+  const utils = new ReminderUtils(settings.url);
+
+  if (settings.connectionType === "local") {
+    reminders = data.reminders || [];
+  } else {
+    reminders = await utils.getRemoteReminders();
+  }
 
   const reminder = reminders.find((r) => r.id === notificationId);
   if (reminder) {

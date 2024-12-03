@@ -56,7 +56,7 @@ export const Settings: React.FC<{
           </div>
         </RadioGroup>
       </div>
-      <div className="flex w-full max-w-sm items-center space-x-2">
+      <div className="flex w-full items-center">
         <Input
           type="url"
           value={settings.url}

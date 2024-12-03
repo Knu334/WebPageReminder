@@ -41,20 +41,20 @@ function App() {
           const utils = new ReminderUtils(localSettings.url);
           storageReminders = await utils.getRemoteReminders();
           storageReminders = removeOldReminders(storageReminders);
-          await utils.setRemoteReminders(storageReminders);
+          utils.setRemoteReminders(storageReminders);
         } catch (error) {
           if (chrome.storage) {
             storageReminders = storage.reminders || [];
             localSettings = { ...localSettings, connectionType: "local" };
             setSettings(localSettings);
-            await chrome.storage.local.set({ settings: localSettings });
+            chrome.storage.local.set({ settings: localSettings });
           }
           console.log(error);
         }
       } else if (chrome.storage) {
         storageReminders = storage.reminders || [];
         storageReminders = removeOldReminders(storageReminders);
-        await chrome.storage.local.set({ reminders: storageReminders });
+        chrome.storage.local.set({ reminders: storageReminders });
       }
       if (storageReminders.length === 0) {
         storageReminders.push(NO_DATA);

@@ -56,7 +56,7 @@ function App() {
         storageReminders = removeOldReminders(storageReminders);
         chrome.storage.local.set({ reminders: storageReminders });
       }
-      if (storageReminders.length === 0) {
+      if (storageReminders.filter((r) => !r.hidden).length === 0) {
         storageReminders.push(NO_DATA);
       }
       setReminders(storageReminders);

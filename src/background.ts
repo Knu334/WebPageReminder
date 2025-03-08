@@ -3,18 +3,6 @@ import { ReminderUtils } from "@/utils/ReminderUtils";
 
 const openedReminders = new Set();
 
-const NO_DATA = {
-  id: "Nodata",
-  url: "Nodata",
-  title: "Nodata",
-  thumbnail: "/assets/no-data.png",
-  reminderTime: "9999-12-31 23:59:59",
-  autoOpen: false,
-  webPush: false,
-  createdAt: new Date().toISOString(),
-  hidden: false,
-} as const satisfies Reminder;
-
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   try {
     // 重複実行を防ぐ
@@ -73,14 +61,6 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     // リマインダーを削除
     reminder.hidden = true;
     reminder.thumbnail = "";
-
-    const activeReminder = reminders.find(
-      (r) => r.id !== NO_DATA.id && !r.hidden
-    );
-
-    if (!activeReminder) {
-      reminders = [...reminders, NO_DATA];
-    }
 
     if (settings.connectionType === "local") {
       await chrome.storage.local.set({ reminders: reminders });

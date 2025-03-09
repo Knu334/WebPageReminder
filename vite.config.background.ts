@@ -11,10 +11,10 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    emptyOutDir: true,
+    emptyOutDir: false,
     rollupOptions: {
       input: {
-        popup: "popup.html",
+        background: "src/background.ts",
       },
       output: {
         inlineDynamicImports: true,

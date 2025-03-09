@@ -21,6 +21,9 @@ export const ReminderList: React.FC<{
       <Carousel>
         <CarouselContent>
           {reminders
+            .filter((r: Reminder) => {
+              return !r.hidden;
+            })
             .sort((a, b) => {
               const aDate = new Date(a.reminderTime);
               const bDate = new Date(b.reminderTime);
@@ -33,10 +36,10 @@ export const ReminderList: React.FC<{
               }
             })
             .map((reminder) => (
-              <CarouselItem>
+              <CarouselItem key={reminder.id}>
                 <Card
                   key={reminder.id}
-                  className="hover:bg-gray-50 cursor-pointer"
+                  className="hover:bg-card-hover cursor-pointer"
                 >
                   <CardContent className="p-4 relative">
                     <Button
@@ -59,11 +62,17 @@ export const ReminderList: React.FC<{
                       }
                     >
                       <div>
-                        <h3 className="font-medium text-lg truncate" title={reminder.title}>
+                        <h3
+                          className="font-medium text-lg truncate"
+                          title={reminder.title}
+                        >
                           {reminder.title}
                         </h3>
                       </div>
-                      <p className="text-sm text-gray-500 truncate" title={reminder.url}>
+                      <p
+                        className="text-sm text-gray-500 truncate"
+                        title={reminder.url}
+                      >
                         {reminder.url}
                       </p>
                       <p className="text-sm mt-1">
@@ -87,8 +96,8 @@ export const ReminderList: React.FC<{
               </CarouselItem>
             ))}
         </CarouselContent>
-        <CarouselPrevious className="ml-2" />
-        <CarouselNext className="mr-2" />
+        <CarouselPrevious />
+        <CarouselNext />
       </Carousel>
     </div>
   );

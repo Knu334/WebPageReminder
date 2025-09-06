@@ -62,6 +62,38 @@ function App() {
       setReminders(storageReminders);
       resetAlerm(storageReminders);
     })();
+    (async () => {
+      if (chrome.tabs && chrome.scripting) {
+        const [activeTab] = await chrome.tabs.query({
+          active: true,
+          lastFocusedWindow: true,
+        });
+        const [ytTimeElement] = await chrome.scripting.executeScript({
+          target: { tabId: activeTab.id! },
+          func: () => {
+            const el = document.querySelector<HTMLElement>(
+              "div.ytp-offline-slate-subtitle-text"
+            );
+            return el ? el.innerText : null;
+          },
+        });
+        if (ytTimeElement && ytTimeElement.result) {
+          const ytTimeGroup =
+            /^(\d+)月(\d+)日 (\d+):(\d+)$/.exec(ytTimeElement.result) || [];
+          if (ytTimeGroup.length == 5) {
+            const ytTimeArray = ytTimeGroup
+              .slice(1)
+              .map((p) => parseInt(p, 10));
+            const ytTime = new Date();
+            ytTime.setMonth(ytTimeArray[0] - 1);
+            ytTime.setDate(ytTimeArray[1]);
+            ytTime.setHours(ytTimeArray[2]);
+            ytTime.setMinutes(ytTimeArray[3]);
+            setReminderTime(ytTime);
+          }
+        }
+      }
+    })();
   }, [settings.connectionType]);
 
   const handleAddReminder = async () => {

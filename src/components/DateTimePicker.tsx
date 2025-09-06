@@ -45,7 +45,7 @@ export const DateTimePicker: React.FC<{
   return (
     <div className="flex justify-center gap-2">
       <Select
-        defaultValue={value.getFullYear().toString()}
+        value={value.getFullYear().toString()}
         onValueChange={(val) => handleChange("year", Number(val))}
       >
         <SelectTrigger>
@@ -60,7 +60,7 @@ export const DateTimePicker: React.FC<{
         </SelectContent>
       </Select>
       <Select
-        defaultValue={(value.getMonth() + 1).toString()}
+        value={(value.getMonth() + 1).toString()}
         onValueChange={(val) => handleChange("month", Number(val))}
       >
         <SelectTrigger>
@@ -75,7 +75,7 @@ export const DateTimePicker: React.FC<{
         </SelectContent>
       </Select>
       <Select
-        defaultValue={value.getDate().toString()}
+        value={value.getDate().toString()}
         onValueChange={(val) => handleChange("day", Number(val))}
       >
         <SelectTrigger>
@@ -90,7 +90,7 @@ export const DateTimePicker: React.FC<{
         </SelectContent>
       </Select>
       <Select
-        defaultValue={value.getHours().toString()}
+        value={value.getHours().toString()}
         onValueChange={(val) => handleChange("hour", Number(val))}
       >
         <SelectTrigger>

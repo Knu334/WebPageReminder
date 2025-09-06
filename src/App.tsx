@@ -89,6 +89,8 @@ function App() {
             ytTime.setDate(ytTimeArray[1]);
             ytTime.setHours(ytTimeArray[2]);
             ytTime.setMinutes(ytTimeArray[3]);
+            ytTime.setSeconds(0);
+            ytTime.setMilliseconds(0);
             setReminderTime(ytTime);
           }
         }

@@ -1,5 +1,5 @@
 ARG IMAGEARCH
-FROM ${IMAGEARCH:-arm64v8/}node:25.8.2-trixie-slim
+FROM ${IMAGEARCH:-arm64v8/}node:24-trixie-slim
 
 ARG TZ
 ENV TZ="$TZ"

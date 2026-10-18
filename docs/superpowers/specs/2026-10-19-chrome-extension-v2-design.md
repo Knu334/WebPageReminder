@@ -38,7 +38,7 @@ reminder-server が旧 API（`POST/PUT /reminders`、body の `key` で識別、
 6. 接続先の URL を https に限り、入力のたびの保存をやめて「保存」ボタンで確定する。
 7. `removeOldReminders` の「1か月前」を「ローカル時刻の前月の同じ日・同じ時刻。その日が無い月は前月の末日（時刻は同じ）」と定義して直す（今は 3/31 の1か月前が 3/3 になる）。境界は「`reminderTime` が1か月前より前」なら削除の対象。
 8. `resetAlerm` の `clearAll()` を `await` してから alarm を作る。
-9. `CLAUDE.md` と `AGENTS.md` を、公式のベストプラクティスに沿って書き直す（「CLAUDE.md と AGENTS.md」の節）。
+9. `CLAUDE.md` を、公式のベストプラクティスに沿って書き直す（「CLAUDE.md」の節）。`AGENTS.md` は `CLAUDE.md` への symlink なので触らない。
 
 含めない（別の PR）:
 
@@ -330,18 +330,18 @@ token、認可 code、`state`、`verifier`、callback URL、署名 URL を log �
 
 server モードの設定手順、operator に渡す値、operator から受け取る値を追記する。AWS の実際の値は書かない。
 
-## CLAUDE.md と AGENTS.md
+## CLAUDE.md
 
 ### 方針（出典: https://code.claude.com/docs/en/memory 、https://code.claude.com/docs/en/best-practices ）
 
 - 書くのは、code を読んでも分からないことだけ: command、既定と違う規約、構成の落とし穴、運用ルール。ディレクトリ構成の説明、言語の一般的な慣習、頻繁に変わる情報は書かない。判定は「この行を消したら agent が間違えるか」。
 - 200 行未満。見出しと箇条書き。指示は検証できる形にする（例: 「commit 前に `npm test` を実行する」）。
 - 強調（`IMPORTANT`）は、守られないと被害が大きい1〜2行だけに付ける。
-- 共有の内容は `AGENTS.md` に置く（Codex が読む）。`CLAUDE.md` は先頭で `@AGENTS.md` を import し、Claude Code 固有の内容だけを足す。今は2つが同じ内容の二重管理になっている。
+- `AGENTS.md` は `CLAUDE.md` への symlink で、Codex も同じ内容を読む。そのため Claude Code だけに通じる書き方（skill 名、`@` の import）を避ける。
 - 確実に守らせたいもの（機密ファイルの拒否など）は、今の hooks（`.claude/hooks/check-bash-command.sh`）と `settings.json` の deny に任せ、文書には重ねて書かない。
 - 存在しない `/github-workflow` skill への参照を消し、手順を本文に書く。
 
-### `AGENTS.md`（完成後の文面）
+### `CLAUDE.md`（完成後の文面）
 
 ```markdown
 ## プロジェクト概要
@@ -384,10 +384,4 @@ Web ページを指定した時刻に開く・通知する Chrome 拡張機能�
 - IMPORTANT: `git push --force` と `git reset --hard` は使わない
 ```
 
-### `CLAUDE.md`（完成後の文面）
-
-```markdown
-@AGENTS.md
-```
-
-Claude Code 固有の内容は今のところ無い。Resume Watchdog は `.claude/rules/resume-watchdog.md`（自動で読み込まれる）のままにする。固有の内容ができたら `## Claude Code` の見出しで足す。
+Resume Watchdog は `.claude/rules/resume-watchdog.md`（Claude Code が自動で読み込む）のままにし、`CLAUDE.md` には書かない。

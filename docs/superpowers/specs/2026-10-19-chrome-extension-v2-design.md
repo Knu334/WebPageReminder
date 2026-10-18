@@ -1,6 +1,6 @@
 # Chrome 拡張機能の reminder-server v2 API・Cognito 認証への移行 設計
 
-作成日: 2026-10-19。Codex の review（同日、2回）を反映。
+作成日: 2026-10-19。Codex の review（同日、3回）を反映。
 
 ## 目的
 
@@ -37,7 +37,7 @@ reminder-server が旧 API（`POST/PUT /reminders`、body の `key` で識別、
 5. alarm と通知の click では、通知とタブを開く判断を cache だけで行う。通知の後の server の更新は best effort とする。
 6. 接続先の URL を https に限り、入力のたびの保存をやめて「保存」ボタンで確定する。
 7. `removeOldReminders` の「1か月前」を「ローカル時刻の前月の同じ日・同じ時刻。その日が無い月は前月の末日（時刻は同じ）」と定義して直す（今は 3/31 の1か月前が 3/3 になる）。境界は「`reminderTime` が1か月前より前」なら削除の対象。
-8. `resetAlerm` の `clearAll()` を `await` してから alarm を作る。
+8. alarm の設定・解除は、local モードも含めて background の queue に集める。popup の `resetAlerm` と `chrome.alarms` の直接の呼び出しは削除する（今は `clearAll()` を `await` せず、モードの切り替えとも競合する）。
 9. `CLAUDE.md` を、公式のベストプラクティスに沿って書き直す（「CLAUDE.md」の節）。`AGENTS.md` は `CLAUDE.md` への symlink なので触らない。
 
 含めない（別の PR）:
@@ -105,7 +105,8 @@ interface SettingsType {
 | `chrome.storage.local` | `settings` | `SettingsType` |
 | `chrome.storage.local` | `reminders` | local モードの一覧（既存） |
 | `chrome.storage.local` | `serverCache` | `{items: ReminderDto[], images: {[id]: {imageId, sha256, dataUrl}}, syncedAt, configKey}` |
-| `chrome.storage.local` | `notifiedIds` | `{[id]: at}`。server モードで通知済みの項目。cache の queue を通さずにすぐ書く。DTO が `hidden:true` になった id と、DTO に無い id は同期の時に消す |
+| `chrome.storage.local` | `notified:<id>` | 通知した時刻。server モードで通知済みの項目ごとに1つの key（1つの map にしないので、読んで書き直す競合が起きない）。cache の queue を通さずにすぐ書く。DTO が `hidden:true` になった id と、DTO に無い id の key は同期の時に `remove` する。以下、これらの key の集まりを `notifiedIds` と呼ぶ |
+| `chrome.storage.session` | `refreshPending` | `{refreshTokenHash, firstSentAt}`。結果が不明な refresh の記録。token そのものは入れず、SHA-256 の hex を入れる |
 
 - `configKey` は、正規化した `apiBaseUrl`、`authBaseUrl`、`clientId`、`imageHost` を `|` でつないだ文字列。今の設定と違う認証状態・cache は使わずに消す。
 - background の起動時と `onInstalled` で `chrome.storage.local.setAccessLevel({accessLevel: "TRUSTED_CONTEXTS"})` を呼ぶ。
@@ -116,7 +117,7 @@ interface SettingsType {
 - `authGen`: module 変数の世代番号。logout、login の成功、`config/save`（接続先が変わった時）、`mode/change` で進める。service worker の再起動では 0 から始まるが、再起動を跨いで続く処理は無いので問題ない。
 - 世代は、message を受け取った時点（alarm は発火した時点）で固定し、その処理の全体で使う。token を取った後、各 API の送信・再送の直前、認証状態・cache・alarm に書く直前に一致を確かめる。違えば、その時点で処理をやめて `STALE` を返す（すでに送った書き込みは取り消さない。次の同期で server の状態に合わせる）。
 - **auth mutex**: 認証状態（`authAttempt`、`authSession`、`authRefresh`、`authNotice`）の読み書きと消去は、`auth.ts` の1本の Promise chain に通す。世代の確認と保存は、同じ mutex の区間の中で行う。refresh の single-flight の Promise は世代ごとに持ち、別の世代の要求とは共有しない。
-- **queue**: `serverCache` と server モードの alarm を書き換える処理（同期、作成、削除、alarm 後の更新、消去、モードの切り替え）は、`cache.ts` の1本の Promise queue に積んで直列にする。`notifiedIds` は queue を通さない。
+- **queue**: `serverCache` とすべての alarm（local モードの分も含む）を書き換える処理（同期、作成、削除、alarm 後の更新、消去、モードの切り替え、`alarms/reset`）は、`cache.ts` の1本の Promise queue に積んで直列にする。`notifiedIds` は queue を通さない。
 - logout と `config/save` は、進行中の fetch を `AbortController` で中断する（世代ごとに1つ持つ）。
 
 ## 認証（`auth.ts`）
@@ -153,8 +154,13 @@ popup の「ログイン」ボタンの message からだけ始める。起動�
 - 成功の検証: `access_token` と `refresh_token` が文字列、`token_type === "Bearer"`、`expires_in` が正の数。rotation が有効なので、`refresh_token` が無い応答は失敗（`REFRESH_FAILED`）として扱う。
 - 保存: auth mutex の中で、`authGen` が開始時と一致することを確かめる（違えば捨てる）。新しい `refresh_token` を先に local へ保存し、そのあと `authSession` を session に保存する。保存が終わるまで、待っている API は再開しない。
 - 400 で `error` が `invalid_grant`、`invalid_client`、`unauthorized_client`: auth mutex の中で、`authGen` が一致する場合だけ、認証状態（`authRefresh`、`authSession`）を消し、`authNotice` に `REFRESH_FAILED` を残し、`LOGIN_REQUIRED` を返す。
-- 通信障害・timeout・5xx: 同じ refresh token の再送は、最初の送信から10秒以内（Cognito の再試行の猶予）に限る。refresh の fetch の timeout は 4秒、backoff は 0.5秒と1秒で、10秒を過ぎる再送はしない。refresh token は消さず、`NETWORK` を返す。次の refresh で `invalid_grant` が返れば、上の処理でログインを案内する。
-- worker が止まって refresh の結果を受け取れなかった場合も、上と同じ扱い（保存済みの refresh token で次に試し、`invalid_grant` ならログインを案内する）。
+- 結果が不明な refresh（Cognito の再試行の猶予は10秒）:
+  - 送る前に、auth mutex の中で `refreshPending` を確かめる。同じ refresh token の記録があり、`firstSentAt` から10秒を過ぎていれば、送らずに認証状態を消し、`authNotice` に `REFRESH_FAILED` を残して `LOGIN_REQUIRED` を返す。記録が無ければ `{refreshTokenHash, firstSentAt: now}` を書いてから送る。
+  - HTTP の応答（成功・失敗とも）を受け取ったら、`refreshPending` を消す。
+  - 通信障害・timeout の時は `refreshPending` を残す。10秒以内なら backoff（0.5秒、1秒）で再送し、10秒を過ぎる再送はしない。refresh token は消さず、`NETWORK` を返す。
+  - 呼び出しや worker の再起動を跨いでも `refreshPending` で同じ判定をする。session storage なので Chrome の再起動では消えるが、その時はすでに10秒を過ぎており、次の refresh の `invalid_grant` でログインを案内する。
+  - 5xx は Cognito が処理しなかった応答として扱い、`refreshPending` を消して、上と同じ backoff で再送する。
+- refresh の fetch の timeout は 4秒（全体の10秒の例外。10秒の猶予の中で再送できるようにするため）。
 - refresh token の期限は延びない（初回から30日）。期限切れは `invalid_grant` で扱う。
 
 ### logout
@@ -173,7 +179,7 @@ popup の「ログイン」ボタンの message からだけ始める。起動�
 ## API client（`api.ts`）
 
 - `request(method, path, {body, ifMatch})`: `getAccessToken()` の token を `Authorization: Bearer` で付ける。body は `Content-Type: application/json`。`{id}` は `encodeURIComponent` する。
-- すべての fetch（API、Cognito、S3）に `AbortSignal.timeout(10_000)` を付ける。timeout は通信障害として扱う。
+- すべての fetch（API、Cognito、S3）に `AbortSignal.timeout(10_000)` を付ける。refresh だけは 4秒（「refresh」の節）。timeout は通信障害として扱う。
 - 戻り値は `{ok: true, status, data, etag}` か `{ok: false, status, code, message}`。`code` は body の `code`、無ければ status から決める（Gateway の error は形が違うため）。
 
 | status | 動作 |
@@ -206,7 +212,8 @@ S3 の画像の fetch は `api.ts` を通さず、Bearer を付けない。
   - PATCH する。412 なら GET からやり直す（1回）。404 なら remote で消えたものとして cache から外す。
   - `UNKNOWN_RESULT` なら GET して、`hidden:true` かつ `thumbnail:null` なら成功。
 - **削除**: GET で ETag を取る。期限切れの整理から呼ばれた場合、最新の DTO の `reminderTime` で条件を判定し直し、外れたら何もしない。DELETE する。404、または `UNKNOWN_RESULT` 後の GET が 404 なら成功。
-  - 412 なら GET し直す。最新の DTO が、user が削除を押した時の cache の DTO と `hidden`・`thumbnail`・`revision`・`updatedAt` 以外で同じなら、新しい ETag で1回だけ DELETE し直す（拡張機能が自分で変えるのは `hidden` と `thumbnail` だけなので、user が見た内容のままと判断できる）。それ以外の field が変わっていれば、cache を最新の DTO にして `CONFLICT` を返す。popup は最新の内容を表示し、user がもう一度削除を押す。
+  - user の削除で 412 なら、GET した最新の DTO で cache を更新して `CONFLICT` を返す。自動では削除し直さない。popup は最新の内容を表示し、user がもう一度削除を押す。
+  - 期限切れの整理で 412 なら、GET からやり直す（1回）。
 - 成功したら、queue の中で cache と alarm を更新する。
 - 読んだ DTO をそのまま PATCH に送らない。
 
@@ -252,7 +259,8 @@ message:
   - decode 後の大きさが 1 MiB を超える画像は、popup が送る前に canvas で幅と高さを半分にして JPEG（quality 0.5）にし直し、収まるまで繰り返す。
   - 成功したら、queue の中で応答の DTO と送った画像（`imageId`・`sha256` は応答の値）を cache に入れ、alarm を作る。
 - **削除**（`reminders/delete`）: 削除の手順で消し、queue の中で cache から外し、alarm を消す。
-- popup は応答の `ok` を見て、失敗なら error を表示し、一覧を元に戻す。server モードでは popup は alarm を触らない（popup が閉じても background が処理を終える）。local モードは今のまま popup が alarm を扱う。
+- popup は応答の `ok` を見て、失敗なら error を表示し、一覧を元に戻す。popup は alarm を触らない。
+- local モードは、popup が今のまま `chrome.storage.local` の `reminders` を読み書きし、書いた後に `alarms/reset` を送る。background は queue の中で、受け付けた時のモードと世代が今と一致する時だけ、`clearAll()` を `await` してから、今のモードの一覧（local の `reminders` か `serverCache`）の未来かつ `hidden:false` の項目で alarm を作り直す。
 
 ## alarm と通知（`background.ts`）
 
@@ -271,12 +279,13 @@ message:
 | `auth/logout` | — | `{ok, revoked}` |
 | `config/save` | `{apiBaseUrl, authBaseUrl, clientId, imageHost}` | `{ok}` または `{ok:false, code}` |
 | `mode/change` | `{connectionType}` | `{ok}` |
+| `alarms/reset` | — | `{ok}` |
 | `reminders/list` | `{fresh?: boolean}` | `{ok, reminders}` または `{ok:false, code, reminders}` |
 | `reminders/create` | `Reminder` | `{ok, reminder}` または `{ok:false, code}` |
 | `reminders/delete` | `{id}` | `{ok}` または `{ok:false, code}` |
 
 - `sender.id === chrome.runtime.id` で、かつ `sender.url` が `chrome-extension://<自拡張の id>/` で始まる message だけを受け付ける。それ以外（content script、他の拡張）は無視する。
-- type ごとに入力を実行時に検証する。未知の type は無視する。`reminders/*` は server モードでなければ `NOT_SERVER_MODE` を返す。`create` は各 field の型と大きさ（server の制限と同じ）、`delete` と `create` の `id` は1〜128 code point の文字列で制御文字（U+0000〜U+001F、U+007F〜U+009F）を含まないことを確かめる。`config/save` は「設定」の節と同じ検証をする。不合格なら `INVALID_MESSAGE` を返し、API を呼ばない。
+- type ごとに入力を実行時に検証する。未知の type は無視する。`reminders/*` は server モードでなければ `NOT_SERVER_MODE` を返す。`create` は各 field の型と大きさ（server の制限と同じ）、`delete` と `create` の `id` は1〜128 code point の文字列で、制御文字（U+0000〜U+001F、U+007F〜U+009F）と対になっていない surrogate を含まないことを確かめる。`config/save` は「設定」の節と同じ検証をする。不合格なら `INVALID_MESSAGE` を返し、API を呼ばない。
 - popup は `sendMessage` の reject（worker の停止などで channel が切れた）を `NETWORK` として表示し、次の操作か開き直しで `reminders/list` と `auth/status` を読み直す。
 - API の body は、許可した field だけから組み立てる。
 - token、署名 URL を popup に返さない。
@@ -337,9 +346,11 @@ token、認可 code、`state`、`verifier`、callback URL、署名 URL を log �
 - refresh: 同時の3回の `getAccessToken` で token endpoint が1回だけ呼ばれる。新しい refresh token が access token より先に保存される。`refresh_token` の無い応答は失敗。`invalid_grant` で認証状態が消える。通信障害・timeout では消えない。最初の送信から10秒を過ぎる再送をしない。世代が変わった応答は捨てる。
 - logout: revoke が失敗しても端末の状態が消え、`authNotice` が `REVOKE_FAILED` になる。logout の後の API の操作は `LOGIN_REQUIRED`。
 - モードの切り替え: 進行中の server の同期が、切り替えた後の local の alarm を上書きしない。
-- alarm: `notifiedIds` にある項目、`hidden:true`、`reminderTime` が1分より先の項目は通知しない。通知の前に `notifiedIds` が書かれる。
+- alarm: `notifiedIds` にある項目、`hidden:true`、`reminderTime` が1分より先の項目は通知しない。通知の前に `notified:<id>` が書かれる。同時の2つの alarm の記録がどちらも残る。
+- alarm の集約: `alarms/reset` の受付の後にモードが切り替わったら、何もしない。モードの切り替えの後に、古いモードの alarm が残らない。
+- refresh の結果が不明: 通信障害の後、10秒を過ぎた次の呼び出し（worker の再起動の後を含む）では同じ token を送らず、`LOGIN_REQUIRED` になる。
 - API: 401 で1回だけ refresh・再送する。429 の `Retry-After` に従う。書き込みの通信障害で再送しない。
-- 書き込みの手順: POST の 201 で成功する。412 で GET からやり直す。404 で cache から外す。POST の `UNKNOWN_RESULT` で GET 照合する。409 と GET 404 で `ALREADY_EXISTS`。整理と alarm の非表示は最新の DTO で条件を判定し直す。1か月を過ぎた項目は DELETE だけ。user の削除の 412 は、`hidden`・`thumbnail` だけの変更なら削除し直し、それ以外の変更なら `CONFLICT`。
+- 書き込みの手順: POST の 201 で成功する。412 で GET からやり直す。404 で cache から外す。POST の `UNKNOWN_RESULT` で GET 照合する。409 と GET 404 で `ALREADY_EXISTS`。整理と alarm の非表示は最新の DTO で条件を判定し直す。1か月を過ぎた項目は DELETE だけ。user の削除の 412 は、cache を最新にして `CONFLICT`（自動で削除し直さない）。
 - 同期: 空の `items` で `nextCursor` が残る page を読み続ける。60秒以内は同期しない。書き込みと画像はそれぞれ30件まで。同期中の作成が全件置き換えで消えない。`sha256`・`imageId` が同じなら取り直さない。照合が合わない画像（hash、`bytes`、`imageId`）、origin が違う URL は保存しない。DTO と `imageId` が違う cache の画像は表示しない。
 - `removeOldReminders` の1か月前の計算: 3/31 → 2/28（平年）・2/29（うるう年）、1/31 → 12/31、5/15 → 4/15、境界の等号。
 - message の送信元の検証、入力の検証。

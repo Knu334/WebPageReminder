@@ -38,6 +38,7 @@ reminder-server が旧 API（`POST/PUT /reminders`、body の `key` で識別、
 6. 接続先の URL を https に限り、入力のたびの保存をやめて「保存」ボタンで確定する。
 7. `removeOldReminders` の「1か月前」を「ローカル時刻の前月の同じ日・同じ時刻。その日が無い月は前月の末日（時刻は同じ）」と定義して直す（今は 3/31 の1か月前が 3/3 になる）。境界は「`reminderTime` が1か月前より前」なら削除の対象。
 8. `resetAlerm` の `clearAll()` を `await` してから alarm を作る。
+9. `CLAUDE.md` と `AGENTS.md` を、公式のベストプラクティスに沿って書き直す（「CLAUDE.md と AGENTS.md」の節）。
 
 含めない（別の PR）:
 
@@ -58,6 +59,8 @@ background (service worker)
   ├─ messages.ts  popup からの message の検証と振り分け
   └─ background.ts alarm、通知、onInstalled（既存）
 ```
+
+`auth.ts`、`api.ts`、`cache.ts`、`sync.ts`、`messages.ts` は `src/background/` に置く。entry の `src/background.ts` は今の場所のまま（`vite.config.background.ts` を変えない）。
 
 ### manifest
 
@@ -326,3 +329,65 @@ token、認可 code、`state`、`verifier`、callback URL、署名 URL を log �
 ## README
 
 server モードの設定手順、operator に渡す値、operator から受け取る値を追記する。AWS の実際の値は書かない。
+
+## CLAUDE.md と AGENTS.md
+
+### 方針（出典: https://code.claude.com/docs/en/memory 、https://code.claude.com/docs/en/best-practices ）
+
+- 書くのは、code を読んでも分からないことだけ: command、既定と違う規約、構成の落とし穴、運用ルール。ディレクトリ構成の説明、言語の一般的な慣習、頻繁に変わる情報は書かない。判定は「この行を消したら agent が間違えるか」。
+- 200 行未満。見出しと箇条書き。指示は検証できる形にする（例: 「commit 前に `npm test` を実行する」）。
+- 強調（`IMPORTANT`）は、守られないと被害が大きい1〜2行だけに付ける。
+- 共有の内容は `AGENTS.md` に置く（Codex が読む）。`CLAUDE.md` は先頭で `@AGENTS.md` を import し、Claude Code 固有の内容だけを足す。今は2つが同じ内容の二重管理になっている。
+- 確実に守らせたいもの（機密ファイルの拒否など）は、今の hooks（`.claude/hooks/check-bash-command.sh`）と `settings.json` の deny に任せ、文書には重ねて書かない。
+- 存在しない `/github-workflow` skill への参照を消し、手順を本文に書く。
+
+### `AGENTS.md`（完成後の文面）
+
+```markdown
+## プロジェクト概要
+
+Web ページを指定した時刻に開く・通知する Chrome 拡張機能（Manifest V3、React + TypeScript + Vite）。
+保存先は local（`chrome.storage.local`）か server（reminder-server の v2 API、Cognito 認証）を設定で選ぶ。
+
+- 設計: `docs/superpowers/specs/2026-10-19-chrome-extension-v2-design.md`
+- server の契約の正: https://github.com/Knu334/reminder-server の `docs/handoffs/api-v2.md`、`docs/handoffs/chrome-extension-cognito-auth.md`。この repository の `docs/handoffs/` は gitignore 対象の写し
+
+## コマンド
+
+- `npm ci`: 依存の導入（Node 22 以上。`.nvmrc` は 24）
+- `npm run build`: popup（`vite.config.ts`）と service worker（`vite.config.background.ts`）を `dist/` に出力
+- `npm run lint` / `npm test`（vitest）
+- 動作確認: `chrome://extensions` で `dist/` を「パッケージ化されていない拡張機能」として読み込む
+
+## 構成の注意
+
+- build は2段。2段目は `emptyOutDir: false` で、1段目の出力に `assets/background.js` を足す
+- `public/manifest.json` はそのまま `dist/` にコピーされる
+- server の API と Cognito への通信は service worker（`src/background/`）だけで行う。popup は `chrome.runtime.sendMessage` で結果だけを受け取る（API Gateway が `chrome-extension://` の CORS を受け付けないため）
+
+## 規約
+
+- IMPORTANT: manifest の `key` を変えない。extension ID が変わり、Cognito に登録した callback URL と logout URL が使えなくなる
+- token・認可 code・署名 URL を `chrome.storage.sync`、DOM、URL、log に置かない。log には error の code と status だけを出す
+- `host_permissions` に `<all_urls>` を足さない。接続先は `optional_host_permissions` と `chrome.permissions.request` で許可する
+- AWS の account ID、ARN、bucket 名、実際の URL を commit、issue、PR に書かない
+
+## 作業ルール
+
+- `node_modules` `dist` 配下は原則参照しない。参照が必要な場合はユーザーに許可を得てから行う
+- commit の前に `npm run lint`、`npm test`、`npm run build` を実行し、すべて通ることを確かめる
+
+## GitHub ワークフロー
+
+- main から `feature-<概要>` ブランチを作り、commit して `gh pr create` で PR を出す。main に直接 commit しない
+- Git/GitHub の操作は `gh` CLI を使う
+- IMPORTANT: `git push --force` と `git reset --hard` は使わない
+```
+
+### `CLAUDE.md`（完成後の文面）
+
+```markdown
+@AGENTS.md
+```
+
+Claude Code 固有の内容は今のところ無い。Resume Watchdog は `.claude/rules/resume-watchdog.md`（自動で読み込まれる）のままにする。固有の内容ができたら `## Claude Code` の見出しで足す。

@@ -18,7 +18,8 @@
 - scope は文字どおり `openid reminder-api/read reminder-api/write`。
 - 時間の値: access token の refresh の閾値 30秒、認可の試行の期限 10分、refresh の再送の猶予 10秒、refresh の fetch の timeout 4秒、その他の fetch の timeout 10秒、同期の間隔 60秒、1回の同期の整理の書き込み 30件・画像の取得 30件、`listPage` の `limit=50`、画像の上限 1 MiB（1,048,576 byte）。
 - token、認可 code、`state`、`verifier`、callback URL、署名 URL を log に出さない。`console.error` には code と status だけ。
-- テストは `src/**/*.test.ts`、node 環境、`TZ=Asia/Tokyo` 固定。`chrome.*` は `src/test/chrome.ts` の mock、`fetch` は `vi.stubGlobal` で差し替える。module の状態（`authGen` など）を持つ module は、`beforeEach` で `vi.resetModules()` してから `await import()` する。
+- テストは `src/**/*.test.ts`、node 環境、`TZ=Asia/Tokyo` 固定。`chrome.*` は `src/test/chrome.ts` の mock、`fetch` は `vi.stubGlobal` で差し替える。module の状態（`authGen` など）を持つ module は、`beforeEach` で `vi.resetModules()` してから、テストで使う module を（`gen.ts` も含めて）すべて `await import()` し直す（同じ reset の後に読んだ instance どうしでないと状態を共有しない）。`setup.ts` の `afterEach` で `vi.useRealTimers()` と `vi.unstubAllGlobals()` を呼ぶ。
+- **lock の取り方**: 2つを取る時は必ず queue → `authLock` の順（`queue(() => authLock(...))`）。`authLock` を持ったまま queue を待たない。queue の中で動く関数は、同じ queue に積まない（再入すると止まる）。そのため queue に積む公開の関数と、queue の中から呼ぶ `...InQueue` の関数を分ける（Task 8）。
 - 各 task の完了時に `npm run lint`、`npm test`、`npm run build` がすべて通る。
 - `DEFAULT_SETTINGS.connectionType` は `"local"` にする（新しい extension ID は新規インストール扱いで、server の接続先が未設定のため。spec に記述が無い部分の決定）。
 
@@ -68,12 +69,12 @@
 - Modify: `package.json`（`"test": "vitest run"`、devDependency `vitest`）、`.github/workflows/build.yml`（`npm run build` の前に `- run: npm test`）、`src/utils/ReminderUtils.ts`
 
 **Interfaces:**
-- Produces: `installChromeMock(): ChromeMock`（`src/test/chrome.ts`。`setup.ts` が `beforeEach` で呼び、`globalThis.chrome` に入れる）。`ChromeMock` は次を持つ: `storage.local` / `storage.session`（`get(keys?)`、`set(obj)`、`remove(keys)`、`setAccessLevel`、中身を見る `_data: Record<string, unknown>`）、`alarms`（`create(name, {when})`、`clear(name)`、`clearAll()`、`getAll()`）、`identity`（`getRedirectURL(p) => "https://test-ext-id.chromiumapp.org/" + p`、`launchWebAuthFlow: vi.fn()`）、`permissions`（`contains: vi.fn(async () => true)`、`request: vi.fn(async () => true)`）、`runtime.id = "test-ext-id"`、`notifications.create/clear`、`tabs.create`（すべて `vi.fn`）。
+- Produces: `installChromeMock(): ChromeMock`（`src/test/chrome.ts`。`setup.ts` が `beforeEach` で呼び、`globalThis.chrome` に入れる）。`ChromeMock` は次を持つ: `storage.local` / `storage.session`（`get(keys?)`、`set(obj)`、`remove(keys)`、`setAccessLevel`、中身を見る `_data: Record<string, unknown>`）、`alarms`（`create(name, {when})`、`clear(name)`、`clearAll()`、`getAll()`）、`identity`（`getRedirectURL(p) => "https://test-ext-id.chromiumapp.org/" + p`、`launchWebAuthFlow: vi.fn()`）、`permissions`（`contains: vi.fn(async () => true)`、`request: vi.fn(async () => true)`）、`runtime.id = "test-ext-id"`、`runtime.sendMessage`、`notifications.create/clear`、`tabs.create`、各 event（`runtime.onMessage`、`runtime.onInstalled`、`alarms.onAlarm`、`notifications.onClicked`）の `addListener`（すべて `vi.fn`）。
 - Produces: `oneMonthBefore(now: Date): Date`（`src/utils/ReminderUtils.ts`）
 
 - [ ] **Step 1: vitest を入れ、設定を書く**
 
-`npm install -D vitest@<確かめた版>`。`vitest.config.ts` は `@` の alias（`vite.config.ts` と同じ）、`test: { environment: "node", include: ["src/**/*.test.ts"], setupFiles: ["src/test/setup.ts"] }`。`setup.ts` は先頭で `process.env.TZ = "Asia/Tokyo"` にし、`beforeEach(() => { globalThis.chrome = installChromeMock() as unknown as typeof chrome })`。
+`npm install -D vitest@<確かめた版>`。`vitest.config.ts` は `@` の alias（`vite.config.ts` と同じ）、`test: { environment: "node", include: ["src/**/*.test.ts"], setupFiles: ["src/test/setup.ts"] }`。`setup.ts` は先頭で `process.env.TZ = "Asia/Tokyo"` にし、`beforeEach(() => { globalThis.chrome = installChromeMock() as unknown as typeof chrome })`、`afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })`。
 
 - [ ] **Step 2: 失敗するテストを書く**（`src/utils/ReminderUtils.test.ts`）
 
@@ -126,8 +127,8 @@ Expected: PASS
   - `ServerCache { items: ReminderDto[]; images: Record<string, { imageId: string; sha256: string; dataUrl: string }>; syncedAt: number; configKey: string }`
   - `type AuthNoticeCode = "LOGIN_FAILED" | "LOGIN_CANCELLED" | "REFRESH_FAILED" | "LOGGED_OUT" | "REVOKE_FAILED" | "LOGOUT_PAGE_FAILED"`
   - `AuthStatus { configured: boolean; permitted: boolean; state: "LOGGED_OUT" | "LOGGED_IN" | "LOGIN_REQUIRED"; loginInProgress: boolean; notice: AuthNoticeCode | null }`
-  - `type Fail = { ok: false; code: string; status?: number }`
-  - `StoragePayloadType` を削除する。
+  - `type Fail = { ok: false; code: string; status?: number; message?: string }`（`status` は HTTP の応答があった時だけ。`message` は server の body の `message`）
+  - `StoragePayloadType` は Task 12 で `ReminderUtils` と一緒に削除する（この task では残す）。
 - Produces（`src/types/messages.ts`）: `type Message` = spec「message」の表の各行を `{ type: "...", ...入力 }` にした union（`config/save` は `{ config: ServerConfig }`、`mode/change` は `{ connectionType }`、`reminders/list` は `{ fresh?: boolean }`、`reminders/create` は `{ reminder: Reminder }`、`reminders/delete` は `{ id: string }`）。
 - Produces（`src/utils/config.ts`）:
   - `normalizeConfig(c: ServerConfig): { ok: true; config: ServerConfig } | { ok: false; errors: Partial<Record<keyof ServerConfig, string>> }`
@@ -170,7 +171,10 @@ Expected: FAIL（module が無い）
 - [ ] **Step 4: テストが通ることを確かめる**
 
 Run: `npm test`
-Expected: PASS。`npm run build` は、`SettingsType.url` を使う既存の code（`App.tsx`、`Settings.tsx`、`background.ts`）で型 error になる。これらは Task 10・12・13 で書き換えるので、この task では `url` を参照する箇所だけ最小限の修正（`settings.apiBaseUrl` を渡す）で build を通す。
+Expected: PASS。続けて `npm run build` を通す。型の変更で壊れる既存の code は、Task 10・12・13 で書き換えるまでの暫定として次だけ直す。
+- `new ReminderUtils(settings.url)`（`App.tsx`、`background.ts`）→ `settings.apiBaseUrl`
+- `Settings.tsx` の URL の `Input` → `value={settings.apiBaseUrl}`、`onChange` で `apiBaseUrl` を更新
+- `Settings.tsx` の `RadioGroup` の `onValueChange` → `value === "server" ? "server" : "local"` に絞ってから渡す
 
 - [ ] **Step 5: Commit**（`feat: 設定・直列化・世代・PKCE の基礎を追加`）
 
@@ -185,17 +189,17 @@ Expected: PASS。`npm run build` は、`SettingsType.url` を使う既存の cod
 - Consumes: `isCurrent`、`signalFor`（Task 2）
 - Produces:
   - `type TokenResult = { ok: true; token: string } | Fail`
-  - `type ApiResult<T> = { ok: true; status: number; data: T; etag: string | null } | (Fail & { status: number })`
+  - `type ApiResult<T> = { ok: true; status: number; data: T; etag: string | null } | Fail`
   - `interface ApiDeps { baseUrl: string; gen: number; getToken: (gen: number, opts?: { force?: boolean }) => Promise<TokenResult>; sleep?: (ms: number) => Promise<void>; random?: () => number }`
   - `createApi(deps: ApiDeps)` が返す `{ listPage(cursor: string | null): Promise<ApiResult<{ items: ReminderDto[]; nextCursor: string | null }>>; getReminder(id): Promise<ApiResult<ReminderDto>>; createReminder(body: CreateBody): Promise<ApiResult<ReminderDto>>; patchReminder(id, patch: { hidden: true; thumbnail: null }, etag: string): Promise<ApiResult<ReminderDto>>; deleteReminder(id, etag): Promise<ApiResult<{ id: string; deleted: true; revision: number }>>; getThumbnailUrl(id): Promise<ApiResult<{ url: string; expiresAt: string; imageId: string; revision: number }>> }`
   - `type CreateBody = { id; url; title; reminderTime; autoOpen; webPush; hidden: false; thumbnail: string | null }`
-  - 失敗の code: body の `code`、無ければ `HTTP_<status>`。通信障害・timeout は GET で `NETWORK`、書き込みで `UNKNOWN_RESULT`。世代が違えば送らずに `STALE`。
+  - 失敗の code: HTTP の応答があれば body の `code`、無ければ `HTTP_<status>`（`status` と、あれば `message` も付ける）。401 の再送の後の 401 は、body に関係なく `UNAUTHORIZED`（`status: 401`）。通信障害・timeout は GET で `NETWORK`、書き込みで `UNKNOWN_RESULT`（どちらも `status` 無し）。世代が違えば送らずに `STALE`（`status` 無し）。token が取れなければ `getToken` の code をそのまま返す。
 
 - [ ] **Step 1: 失敗するテストを書く**（`fetch` は `vi.fn` を `vi.stubGlobal`、`sleep` は即時の `vi.fn`）
 
 - `"送る前に世代を確かめる"`: `bumpGen()` の後の `listPage(null)` は `fetch` を呼ばずに `{ ok: false, code: "STALE" }`。
 - `"Bearer と JSON を付ける"`: `createReminder` の request に `Authorization: Bearer t1`、`Content-Type: application/json`、`signal`。`getReminder("a/b")` の path が `/v2/reminders/a%2Fb`。
-- `"401 で1回だけ force refresh して再送する"`: 401→200 で `getToken` が `{force: true}` 付きで1回、`fetch` 2回。401→401 で `{ code: "HTTP_401" }`（body に code があればそれ）、`fetch` 2回。
+- `"401 で1回だけ force refresh して再送する"`: 401→200 で `getToken` が `{force: true}` 付きで1回、`fetch` 2回。401→401 で `{ ok: false, code: "UNAUTHORIZED", status: 401 }`、`fetch` 2回。
 - `"429 は Retry-After と jitter で最大2回"`: `Retry-After: 3`、`random=()=>0.5` で `sleep(3500)`。3回とも 429 なら `fetch` 3回で失敗。
 - Review Focus 2: `"JSON でない 429 は1秒待つ"`: body `"<html>"`、header 無し → `sleep(1000 + jitter)`、例外を投げない、最終的に `{ code: "HTTP_429", status: 429 }`。
 - `"GET の通信障害は 0.5秒・1秒で最大2回、書き込みは再送しない"`: `fetch` が reject → `listPage` は3回呼んで `NETWORK`。`patchReminder` は1回で `UNKNOWN_RESULT`。503 の書き込みも `UNKNOWN_RESULT`。
@@ -274,7 +278,7 @@ Expected: PASS
 
 **Interfaces:**
 - Consumes: `randomToken`、`codeChallenge`（Task 2）、`authLock`（Task 4）
-- Produces: `login(gen: number): Promise<{ ok: true } | Fail>`（失敗の code は `NOT_CONFIGURED`、`LOGIN_IN_PROGRESS`、`LOGIN_CANCELLED`、`LOGIN_FAILED`、`STALE`）。成功時に `bumpGen()` する。cache と alarm の消去・同期の開始は呼び出し側（Task 10）が行う。
+- Produces: `login(gen: number): Promise<{ ok: true; gen: number } | Fail>`（失敗の code は `NOT_CONFIGURED`、`LOGIN_IN_PROGRESS`、`LOGIN_CANCELLED`、`LOGIN_FAILED`、`STALE`）。成功時に `authLock` の中で `bumpGen()` し、その新しい世代を `gen` で返す。cache と alarm の消去・同期の開始は、呼び出し側（Task 10）がこの `gen` を使って行う。`login` は queue に触らない。
 
 - [ ] **Step 1: 失敗するテストを書く**（`launchWebAuthFlow` の mock は、渡された URL の `state` を読んで callback を返す）
 
@@ -310,7 +314,7 @@ Expected: PASS
 - Create: `src/background/auth.logout.test.ts`
 
 **Interfaces:**
-- Produces: `logout(): Promise<{ revoked: boolean; gen: number }>`（`gen` は1で進めた後の世代。呼び出し側が cache の消去に使う）
+- Produces: `logout(clearLocal: (gen: number) => Promise<void>): Promise<{ revoked: boolean }>`。`clearLocal` は spec「logout」の3（cache と server の alarm の消去）で、revoke の後・logout の page を開く前に、1で進めた世代を渡して呼ぶ。`logout` は `authLock` を持ったまま `clearLocal` を呼ばない（Task 10 が `clearLocal` の中で queue を使うため）。
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -323,7 +327,7 @@ Expected: PASS
 
 - [ ] **Step 2: 失敗を確かめる** — Run: `npx vitest run src/background/auth.logout.test.ts` / Expected: FAIL
 
-- [ ] **Step 3: `logout` を実装する**（spec「logout」の1・2・4・5。3の cache の消去は Task 10）
+- [ ] **Step 3: `logout` を実装する**（spec「logout」の1〜5。3は `clearLocal(gen)` の呼び出し。テストでは `clearLocal` に `vi.fn` を渡し、revoke の後・page の前に1回、1の世代で呼ばれることも確かめる）
 
 - [ ] **Step 4: テストが通ることを確かめる** — Run: `npx vitest run src/background` / Expected: PASS
 
@@ -343,7 +347,7 @@ Expected: PASS
   - `readCache(): Promise<ServerCache>`（無い、または `configKey` が今の設定と違えば、空の cache を返し、古いものは消す）
   - `writeCache(gen: number, cache: ServerCache): Promise<boolean>`（世代が違えば書かずに `false`）
   - `upsertItem(cache, dto, image?)`、`removeItem(cache, id)`: `ServerCache` を返す純粋関数
-  - `clearServerCache(): Promise<void>`
+  - `clearServerCache(gen: number): Promise<boolean>`（世代が違えば消さずに `false`。古い login・logout の後処理が、新しい世代の cache を消さないため）
   - `markNotified(id: string): Promise<void>`（`notified:<id>` に `Date.now()`）、`getNotifiedIds(): Promise<Set<string>>`、`removeNotified(ids: string[]): Promise<void>`
   - `toReminders(cache: ServerCache, notified: Set<string>): Reminder[]`（spec「DTO から Reminder への変換」）
 - Produces（`alarms.ts`）: `rebuildAlarms(gen: number): Promise<void>`（queue の中から呼ぶ前提。今のモードの一覧から、未来かつ `hidden:false`（server は通知済みも除く）の項目で alarm を作る。`clearAll()` を `await` してから作る。世代が違えば何もしない）、`clearServerAlarms(gen: number): Promise<void>`（今のモードが server の時だけ `clearAll()`）
@@ -353,7 +357,7 @@ Expected: PASS
 - `toReminders`: `imageId`・`sha256` が DTO と一致する時だけ data URL、違えば `NO_DATA.thumbnail`。`notified` にある id は `hidden: true`。
 - `"notified の同時の記録がどちらも残る"`: `Promise.all([markNotified("a"), markNotified("b")])` → `getNotifiedIds()` が `{a, b}`。
 - `readCache`: `configKey` が違う cache は空になり、storage から消える。
-- `writeCache`: `bumpGen()` の後は `false` で書かない。
+- `writeCache` と `clearServerCache`: `bumpGen()` の後に古い世代で呼ぶと `false` で、storage が変わらない。
 - `upsertItem`: 同じ id を2回入れても1件（Review Focus 5）。
 - `rebuildAlarms`: server モードで、未来・過去・`hidden:true`・通知済みの4項目 → 未来の1件だけ。local モードでは `reminders` から作る。世代が違えば `clearAll` を呼ばない。
 
@@ -376,16 +380,21 @@ Expected: PASS
 - Consumes: `createApi`（Task 3）、`getAccessToken`（Task 4）、`queue`・`readCache`・`writeCache`・`upsertItem`・`removeItem`・`toReminders`・`getNotifiedIds`（Task 7）、`rebuildAlarms`（Task 7）
 - Produces（`sync.ts`）:
   - `apiFor(gen: number): Promise<ReturnType<typeof createApi>>`（設定の `apiBaseUrl` と `getAccessToken` で作る）
-  - `createOnServer(gen: number, r: Reminder): Promise<{ ok: true; reminder: Reminder } | Fail>`
-  - `hideOnServer(gen: number, id: string): Promise<{ ok: true } | Fail>`
-  - `deleteOnServer(gen: number, id: string, from: "user" | "cleanup"): Promise<{ ok: true } | Fail>`
-  - 成功後の cache と alarm の更新は `queue` の中で `writeCache` → `rebuildAlarms`。
+  - 公開の関数（queue の外から呼ぶ。API の通信は queue の外で行い、成功後に `queue(() => ...)` の中で `readCache` → 更新 → `writeCache` → `rebuildAlarms` をする）:
+    - `createOnServer(gen: number, r: Reminder): Promise<{ ok: true; reminder: Reminder } | Fail>`
+    - `hideOnServer(gen: number, id: string): Promise<{ ok: true } | Fail>`（`notify.ts` から呼ぶ）
+    - `deleteOnServer(gen: number, id: string): Promise<{ ok: true } | Fail>`（user の削除。412 は `CONFLICT`）
+  - queue の中から呼ぶ関数（Task 9 の同期が使う。queue に積まず、`writeCache` もしない。渡された `cache` を更新した新しい `ServerCache` を返す）:
+    - `hideInQueue(gen: number, api: Api, cache: ServerCache, id: string): Promise<{ result: { ok: true } | Fail; cache: ServerCache }>`
+    - `deleteInQueue(gen: number, api: Api, cache: ServerCache, id: string): Promise<{ result: { ok: true } | Fail; cache: ServerCache }>`（期限切れの整理。412 は GET からやり直す）
+  - 通信と判定の本体（GET → 判定 → PATCH/DELETE → 412・404・`UNKNOWN_RESULT` の処理）は、公開の関数と `...InQueue` で共有する内部の関数に1つだけ書く。`type Api = ReturnType<typeof createApi>`。
 
 - [ ] **Step 1: 失敗するテストを書く**（`createApi` を `vi.mock` で fake にし、route ごとの応答を並べる）
 
 - 作成: `"201 で成功し cache に入る"`（body は spec の7 field と `hidden: false`。`thumbnail` が `NO_DATA.thumbnail` なら `null`、`createdAt` などは送らない）。`"UNKNOWN_RESULT → GET 200 で成功"`、`"UNKNOWN_RESULT → GET 404 → POST 1回だけ再送"`、`"409 → GET 404 で ALREADY_EXISTS"`、`"409 → GET 200 で成功"`。
 - 非表示: `"最新が未来の時刻なら PATCH しない"`、`"すでに hidden かつ thumbnail null なら PATCH しない"`、`"412 で GET からやり直す（1回）"`、`"404 で cache から外す"`、`"UNKNOWN_RESULT → GET で両方の条件を満たせば成功"`。PATCH の body は `{ hidden: true, thumbnail: null }` だけ。
-- 削除: `"user の 412 は cache を最新にして CONFLICT、DELETE は1回"`、`"cleanup の 412 は GET からやり直す"`、`"cleanup で最新が1か月以内なら DELETE しない"`、`"404 と UNKNOWN_RESULT → GET 404 は成功"`。
+- 削除: `"user の 412 は cache を最新にして CONFLICT、DELETE は1回"`（`deleteOnServer`）、`"cleanup の 412 は GET からやり直す"`・`"cleanup で最新が1か月以内なら DELETE しない"`（`deleteInQueue`）、`"404 と UNKNOWN_RESULT → GET 404 は成功"`。
+- 再入: `"queue の中から hideInQueue・deleteInQueue を呼んでも完了する"`（`queue(() => hideInQueue(...))` が timeout せずに解決する）。
 - 世代: `"受け付けた後に bumpGen されたら API を送らず STALE"`（作成の前に `bumpGen()`）。
 
 - [ ] **Step 2: 失敗を確かめる** — Run: `npx vitest run src/background/sync.write.test.ts` / Expected: FAIL
@@ -417,13 +426,14 @@ Expected: PASS
 - `"画像の照合"`（each）: URL の `imageId` 違い、origin が `imageHost` と違う、status 200 以外、`bytes` 違い、hash 違い → 保存しない。S3 の fetch に `Authorization` が無く、`redirect: "error"`。
 - `"DTO の thumbnail が null、または DTO に無い id の画像を消す"`。
 - `"notified から hidden:true と DTO に無い id を消す"`。
-- `"同期中の作成が全件置き換えで消えない"`: 同期の `listPage` を保留し、その間に `createOnServer` を成功させ、同期を解決 → 最後の cache に作成した項目がある。
+- `"同期中の作成が全件置き換えで消えない"`: 同期の `listPage` を保留する → `createOnServer` を開始して Promise を持つ（POST は即 201）→ `listPage` を解決する → 両方の Promise を待つ → cache に作成した項目が1件だけある。`listPage` の応答に作成した id を含める場合と含めない場合の両方で確かめる。
+- `"同期中の config/save が完了する"`（lock の順）: 同期の `listPage` を保留し、`config/save` の処理（Task 10 と同じ `queue(() => authLock(...))`）を開始 → `listPage` を解決 → 両方が timeout せずに解決する。
 - `"失敗した時は cache の変換と code を返す"`。
 - `"同期の後に server の alarm を作り直す"`。
 
 - [ ] **Step 2: 失敗を確かめる** — Run: `npx vitest run src/background/sync.list.test.ts` / Expected: FAIL
 
-- [ ] **Step 3: 実装する**（spec「一覧の同期」の手順1〜6）
+- [ ] **Step 3: 実装する**（spec「一覧の同期」の手順1〜6。整理には `hideInQueue`・`deleteInQueue` を使い、最後に1回 `writeCache`）
 
 - [ ] **Step 4: テストが通ることを確かめる** — Run: `npx vitest run src/background` / Expected: PASS
 
@@ -452,12 +462,12 @@ Expected: PASS
 | type | 処理 |
 | --- | --- |
 | `auth/status` | `getAuthStatus()` |
-| `auth/login` | `login(gen)`。成功なら `queue(() => clearServerCache().then(() => clearServerAlarms(currentGen())))` の後、`listReminders(currentGen(), true)` を待たずに始める |
-| `auth/logout` | `logout()` の後、`queue` の中で `clearServerCache` と `clearServerAlarms`。`{ ok: true, revoked }` |
-| `config/save` | `normalizeConfig` で再検証 → `authLock(() => queue(...))` の中で保存。`configKey` が変わったら `bumpGen()`、`clearAuth()`、`clearServerCache()`、`clearServerAlarms()` |
+| `auth/login` | `login(gen)`。成功なら返った `g` で `queue(async () => { if (await clearServerCache(g)) await clearServerAlarms(g) })` の後、`listReminders(g, true)` を待たずに始める |
+| `auth/logout` | `logout((g) => queue(async () => { if (await clearServerCache(g)) await clearServerAlarms(g) }))`。`{ ok: true, revoked }` |
+| `config/save` | `normalizeConfig` で再検証 → `queue(() => authLock(...))` の中で保存。`configKey` が変わったら `bumpGen()` した `g` で `clearAuth()`、`clearServerCache(g)`、`clearServerAlarms(g)` |
 | `mode/change` | `queue` の中で保存、`bumpGen()`、`rebuildAlarms(currentGen())` |
 | `alarms/reset` | `queue` の中で、受け付けた時の世代とモードが今と一致すれば `rebuildAlarms` |
-| `reminders/*` | server モードでなければ `NOT_SERVER_MODE`。`list` → `listReminders`、`create` → `createOnServer`、`delete` → `deleteOnServer(gen, id, "user")` |
+| `reminders/*` | server モードでなければ `NOT_SERVER_MODE`。`list` → `listReminders`、`create` → `createOnServer`、`delete` → `deleteOnServer(gen, id)` |
 
 - [ ] **Step 1: 失敗するテストを書く**
 
@@ -466,6 +476,7 @@ Expected: PASS
 - `parseMessage`: 未知の type は `unknown`。`reminders/create` の `reminder.url` が `ftp:` や 4097 文字、`title` が 1025 文字、`autoOpen` が `"true"` は `invalid`。`config/save` の不正な URL は `invalid`。
 - `"local モードの reminders/list は NOT_SERVER_MODE"`。
 - `"config/save で接続先が変わると認証と cache と alarm が消え、世代が進む"`。変わらなければ消さない。
+- `"logout の revoke 中に成功した新しい login の cache と alarm を、logout の後処理が消さない"`。`"login の後処理の前に logout が来たら、login の後処理は何もしない"`。
 - `"受け付けた後に config/save が来た作成は STALE で API を送らない"`。
 - `"alarms/reset の受付の後に mode/change が来たら何もしない"`、`"mode/change の後に古いモードの alarm が残らない"`。
 - `"進行中の server の同期が、切り替えた後の local の alarm を上書きしない"`。
@@ -504,8 +515,8 @@ openssl rsa -in ~/.config/webpagereminder/extension-key.pem -pubout -outform DER
 
 - [ ] **Step 3: 確かめる**
 
-Run: `npm run build && node -e "const m=require('./dist/manifest.json');if(m.host_permissions||m.permissions.includes('identity.email')||!m.key)process.exit(1)" && git status --short | grep -c pem`
-Expected: build が成功し、node が exit 0、`grep -c pem` が `0`。
+Run: `node -e "const m=require('./public/manifest.json');if(m.host_permissions||m.permissions.includes('identity.email')||!m.key||m.optional_host_permissions.length!==2)process.exit(1)" && test -f ~/.config/webpagereminder/extension-key.pem && ! git ls-files --others --cached | grep -q '\.pem$' && npm run build`
+Expected: すべて exit 0（manifest が spec どおり、鍵が repository の外にあり、`.pem` が repository に無く、build が通る）。
 
 - [ ] **Step 4: Commit**（`feat: manifest の権限を絞り、extension ID を固定する`）。ID と2つの URL（`https://<id>.chromiumapp.org/cognito`、`/logout`）を報告に残す。
 
@@ -520,14 +531,19 @@ Expected: build が成功し、node が exit 0、`grep -c pem` が `0`。
 **Interfaces:**
 - Consumes: `Message`（Task 2）、Task 10 の応答の形
 - Produces（`bg.ts`）: `send<T>(msg: Message): Promise<T | Fail>`（`sendMessage` の reject は `{ ok: false, code: "NETWORK" }`）、`errorText(code: string, status?: number): string | null`（spec「error の表示」の表。`STALE` は `null`。`HTTP_429` は429の文言、status 403 は「権限がありません（<code>）」）
-- Produces（`image.ts`）: `decodedSize(dataUrl: string): number`、`shrinkToLimit(dataUrl: string, reencode: (dataUrl: string) => Promise<string>, limit = 1_048_576): Promise<string | null>`（`reencode` は幅と高さを半分にした JPEG quality 0.5。1辺が 16px 未満になっても超えるなら `null`）、`canvasHalve(dataUrl: string): Promise<string>`（popup 用の `reencode`）
+- Produces（`image.ts`）:
+  - `decodedSize(dataUrl: string): number`
+  - `type Reencoded = { dataUrl: string; width: number; height: number }`
+  - `shrinkToLimit(dataUrl: string, reencode: (dataUrl: string) => Promise<Reencoded>, limit = 1_048_576): Promise<string | null>`: 1 MiB 以下ならそのまま返す。超えれば `reencode` を繰り返し、収まった時点の data URL を返す。`reencode` の結果の長い辺が 16px 未満になった時、または8回繰り返しても収まらない時は `null`（16px と8回は spec に無い、この計画で決めた打ち切りの条件）。
+  - `canvasHalve(dataUrl: string): Promise<Reencoded>`（popup 用。幅と高さを半分にした JPEG quality 0.5）
+- 画像なしの経路は1つにする: capture の失敗（`NO_DATA.thumbnail` の path）は縮小せず、そのまま `Reminder.thumbnail` に入れる。`shrinkToLimit` が `null` なら `Reminder.thumbnail = NO_DATA.thumbnail` にする。API の `null` への変換は Task 8 の `createOnServer` だけが行う。
 
 - [ ] **Step 1: 失敗するテストを書く**
 
 - `errorText`: 表の各 code の文言、`STALE` → `null`、未知 → `"エラー（X）"`。
 - `send`: `chrome.runtime.sendMessage` が reject → `{ ok: false, code: "NETWORK" }`。
 - `decodedSize`: `"data:image/png;base64,QUJD"` → 3、padding 付き → 正しい byte 数。
-- Review Focus 4: `shrinkToLimit` に「呼ぶたびに半分の大きさを返す fake」を渡すと、4 MiB は2回で収まる。「大きさが変わらない fake」なら上限の回数で止まり `null`。1 MiB 以下はそのまま返す。
+- Review Focus 4: `shrinkToLimit` に「呼ぶたびに data の長さと寸法を半分にする fake」を渡すと、4 MiB（4000×3000）は2回で収まる。「長さが変わらず寸法だけ半分になる fake」なら長い辺が 16px 未満になった時点で `null`。「長さも寸法も変わらない fake」なら8回で止まり `null`。1 MiB 以下は `reencode` を呼ばずにそのまま返す。
 
 - [ ] **Step 2: 失敗を確かめる** — Run: `npx vitest run src/utils` / Expected: FAIL
 
@@ -536,11 +552,15 @@ Expected: build が成功し、node が exit 0、`grep -c pem` が `0`。
 - 初期化: `loadSettings()`。server モードは `send({type:"reminders/list"})` で表示し、続けて `send({type:"reminders/list", fresh:true})` で更新する。失敗なら `reminders` を表示し `errorText` を Label に出す。local への自動の切り替えを削除する。
 - 作成: server は `shrinkToLimit(capture, canvasHalve)` の後に `send({type:"reminders/create", reminder})`。失敗なら一覧を元に戻し error を出す。local は今のまま保存し、`send({type:"alarms/reset"})`。
 - 削除: server は `send({type:"reminders/delete", id})`、`CONFLICT` なら `reminders/list` を読み直す。local は今のまま保存し、`alarms/reset`。
-- `chrome.alarms` と `resetAlerm` の呼び出しをすべて消す（`grep -n "chrome.alarms\|resetAlerm" src/App.tsx src/utils` が空になる）。
+- 切断の後の読み直し: `send` が `NETWORK` を返したら、`App` の state の `needsReload` を `true` にする。次の操作（作成・削除・モードの切り替え）の前に、`needsReload` なら `reminders/list`（`fresh: true`）と `auth/status` を読み直して表示を更新し、`false` に戻してから操作する。開き直した時は初期化で両方を読む。
+- `chrome.alarms` と `resetAlerm` の呼び出しをすべて消す。
+- `StoragePayloadType` を `src/types/types.ts` から削除する。
 
-- [ ] **Step 4: テストと build を通す** — Run: `npm test && npm run lint && npm run build` / Expected: PASS。`grep -rn "axios\|ReminderUtils(\|getProfileUserInfo" src package.json` が空。
+- [ ] **Step 4: テストと build を通す** — Run: `npm test && npm run lint && npm run build && ! grep -rnE "chrome\.alarms|resetAlerm" src/App.tsx src/components src/utils && ! grep -rnE "axios|new ReminderUtils|getProfileUserInfo|StoragePayloadType" src package.json` / Expected: すべて exit 0。
 
-- [ ] **Step 5: Commit**（`feat: popup の reminder の操作を background の message に切り替える`）
+- [ ] **Step 5: 手で確かめる**: server モードで service worker を `chrome://extensions` から停止した直後に作成を押す → error が出る → もう一度押すと、一覧と状態が読み直されてから作成される。
+
+- [ ] **Step 6: Commit**（`feat: popup の reminder の操作を background の message に切り替える`）
 
 ---
 
@@ -561,6 +581,7 @@ Expected: build が成功し、node が exit 0、`grep -c pem` が `0`。
 - 4つの `Input`（既存の `@/components/ui/input`）と「保存」ボタン。保存は `normalizeConfig` → 欄ごとの error の表示 → `send({type:"config/save", config})` → `chrome.permissions.request({ origins: originPatterns(config) })`。
 - 状態欄は `send({type:"auth/status"})` を開いた時と各操作の後に読み、次の文言にする: 未設定 / 許可なし（「許可する」ボタン）/ 未ログイン / ログイン中 / 要再ログイン / ログイン処理中。`notice` が `REVOKE_FAILED` なら「ログアウトしたが、server 側の失効は未完了（通信障害）」、`LOGOUT_PAGE_FAILED` なら「Cognito のログインの記録が残っている可能性がある」も出す。
 - 「ログイン」「ログアウト」ボタンは状態に応じて片方を出す。
+- 保存・ログイン・ログアウトの `send` が `NETWORK` を返したら、次にこの画面で操作する前に `auth/status` を読み直す（Task 12 の `needsReload` と同じ扱い。`App` から props で受け取らず、component の中の state で持つ）。
 - callback URL と logout URL（`chrome.identity.getRedirectURL("cognito")`、`("logout")`）を `readOnly` の `Input` で出す。
 
 - [ ] **Step 2: `Settings.tsx` を書き換える**
@@ -594,8 +615,8 @@ operator から受け取る値（spec の handoff「接続先の値」の表の4
 
 - [ ] **Step 3: 全体を確かめる**
 
-Run: `npm ci && npm run lint && npm test && npm run build && wc -l CLAUDE.md && test -L AGENTS.md && grep -rn "reminders\"\|/reminders\b\|key:" src --include=*.ts --include=*.tsx | grep -v test`
-Expected: すべて成功。`CLAUDE.md` は 200 行未満。`AGENTS.md` は symlink のまま。旧 route（`/reminders`）と body の `key` の呼び出しが残っていない。
+Run: `npm ci && npm run lint && npm test && npm run build && test "$(wc -l < CLAUDE.md)" -lt 200 && test "$(readlink AGENTS.md)" = CLAUDE.md && ! grep -rnE "[\"'\`]/reminders[\"'\`]|getProfileUserInfo|key: await" src`
+Expected: すべて exit 0（`CLAUDE.md` が 200 行未満、`AGENTS.md` が `CLAUDE.md` への symlink のまま、旧 route の文字列 `"/reminders"` と body の `key` の組み立てが残っていない）。
 
 - [ ] **Step 4: Commit**（`docs: README と CLAUDE.md を v2 移行に合わせる`）
 

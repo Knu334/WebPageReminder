@@ -172,7 +172,7 @@ Expected: FAIL（module が無い）
 
 Run: `npm test`
 Expected: PASS。続けて `npm run build` を通す。型の変更で壊れる既存の code は、Task 10・12・13 で書き換えるまでの暫定として次だけ直す。
-- `new ReminderUtils(settings.url)`（`App.tsx`、`background.ts`）→ `settings.apiBaseUrl`
+- `new ReminderUtils(settings.url)`（`App.tsx` の作成・削除、`background.ts`）と `new ReminderUtils(localSettings.url)`（`App.tsx` の初期化）→ それぞれ `.apiBaseUrl`。`grep -rn "\.url)" src/App.tsx src/background.ts` で `ReminderUtils` に渡す `url` が残っていないことを確かめる
 - `Settings.tsx` の URL の `Input` → `value={settings.apiBaseUrl}`、`onChange` で `apiBaseUrl` を更新
 - `Settings.tsx` の `RadioGroup` の `onValueChange` → `value === "server" ? "server" : "local"` に絞ってから渡す
 
@@ -552,7 +552,10 @@ Expected: すべて exit 0（manifest が spec どおり、鍵が repository の
 - 初期化: `loadSettings()`。server モードは `send({type:"reminders/list"})` で表示し、続けて `send({type:"reminders/list", fresh:true})` で更新する。失敗なら `reminders` を表示し `errorText` を Label に出す。local への自動の切り替えを削除する。
 - 作成: server は `shrinkToLimit(capture, canvasHalve)` の後に `send({type:"reminders/create", reminder})`。失敗なら一覧を元に戻し error を出す。local は今のまま保存し、`send({type:"alarms/reset"})`。
 - 削除: server は `send({type:"reminders/delete", id})`、`CONFLICT` なら `reminders/list` を読み直す。local は今のまま保存し、`alarms/reset`。
-- 切断の後の読み直し: `send` が `NETWORK` を返したら、`App` の state の `needsReload` を `true` にする。次の操作（作成・削除・モードの切り替え）の前に、`needsReload` なら `reminders/list`（`fresh: true`）と `auth/status` を読み直して表示を更新し、`false` に戻してから操作する。開き直した時は初期化で両方を読む。
+- 切断の後の読み直し: `App` が `needsReload` を1つだけ持ち、次の2つの関数を作る。
+  - `markDisconnected(): void`: `needsReload` を `true` にする。`App` の中の `send` が `NETWORK` を返した時に呼ぶ。Task 13 の `ServerSettings` にも props で渡す。
+  - `ensureFresh(): Promise<void>`: `needsReload` なら `reminders/list`（`fresh: true`）と `auth/status` を読み直して表示を更新し、`false` に戻す。次の操作（作成・削除・モードの切り替え）の前に呼ぶ。Task 13 の `ServerSettings` にも props で渡す。
+  - 開き直した時は初期化で両方を読む。
 - `chrome.alarms` と `resetAlerm` の呼び出しをすべて消す。
 - `StoragePayloadType` を `src/types/types.ts` から削除する。
 
@@ -574,14 +577,14 @@ Expected: すべて exit 0（manifest が spec どおり、鍵が repository の
 - Consumes: `normalizeConfig`・`originPatterns`（Task 2）、`send`・`errorText`（Task 12）
 - Produces:
   - `Settings` の props: `{ settings: SettingsType; onSettingsChange: (patch: Partial<Pick<SettingsType, "autoOpen" | "webPush">>) => void; onModeChange: (t: ConnectionType) => void }`。`App` は `onSettingsChange` で storage の今の値にその field だけを重ねて保存し、`onModeChange` で `send({type:"mode/change", connectionType})` の後に一覧を読み直す。
-  - `ServerSettings` の props: `{ settings: SettingsType; onSaved: (c: ServerConfig) => void }`。入力中の4項目は component の state。
+  - `ServerSettings` の props: `{ settings: SettingsType; onSaved: (c: ServerConfig) => void; markDisconnected: () => void; ensureFresh: () => Promise<void> }`（後の2つは Task 12 の `App` の関数）。入力中の4項目は component の state。
 
 - [ ] **Step 1: `ServerSettings` を実装する**（spec「設定画面」）
 
 - 4つの `Input`（既存の `@/components/ui/input`）と「保存」ボタン。保存は `normalizeConfig` → 欄ごとの error の表示 → `send({type:"config/save", config})` → `chrome.permissions.request({ origins: originPatterns(config) })`。
 - 状態欄は `send({type:"auth/status"})` を開いた時と各操作の後に読み、次の文言にする: 未設定 / 許可なし（「許可する」ボタン）/ 未ログイン / ログイン中 / 要再ログイン / ログイン処理中。`notice` が `REVOKE_FAILED` なら「ログアウトしたが、server 側の失効は未完了（通信障害）」、`LOGOUT_PAGE_FAILED` なら「Cognito のログインの記録が残っている可能性がある」も出す。
 - 「ログイン」「ログアウト」ボタンは状態に応じて片方を出す。
-- 保存・ログイン・ログアウトの `send` が `NETWORK` を返したら、次にこの画面で操作する前に `auth/status` を読み直す（Task 12 の `needsReload` と同じ扱い。`App` から props で受け取らず、component の中の state で持つ）。
+- 保存・ログイン・ログアウトの前に `await ensureFresh()` を呼ぶ。その `send` が `NETWORK` を返したら `markDisconnected()` を呼ぶ（切断の状態は `App` の1つだけで持ち、この component では持たない）。
 - callback URL と logout URL（`chrome.identity.getRedirectURL("cognito")`、`("logout")`）を `readOnly` の `Input` で出す。
 
 - [ ] **Step 2: `Settings.tsx` を書き換える**
@@ -597,6 +600,7 @@ Connection Type の `RadioGroup` は `onModeChange`、Auto-open・Web Push は `
 - 保存で許可の dialog が出る。拒否すると状態が「許可なし」で「許可する」ボタンが出る。
 - callback URL が `https://<Task 11 の ID>.chromiumapp.org/cognito`。
 - local と server を切り替えても例外が出ない（service worker の console）。
+- 切断の共有: service worker を `chrome://extensions` から停止した直後に設定画面で「ログイン」を押す → error が出る → Reminders の tab に移って作成を押すと、先に一覧と状態が読み直されてから作成される（popup の React の component にはテストの基盤が無いので、手で確かめる）。
 
 - [ ] **Step 5: Commit**（`feat: server の接続先とログインの設定画面を追加`）
 

@@ -69,8 +69,3 @@ export interface AuthStatus {
 }
 
 export type Fail = { ok: false; code: string; status?: number; message?: string };
-
-export interface StoragePayloadType {
-  key: string;
-  reminders: Reminder[];
-}

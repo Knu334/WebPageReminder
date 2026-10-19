@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DateTimePicker } from "@/components/DateTimePicker";
 import { Settings } from "@/components/Settings";
 import { ReminderList } from "@/components/ReminderList";
@@ -6,21 +6,78 @@ import {
   captureVisibleTab,
   createZeroSecCurrentDate,
   DEFAULT_SETTINGS,
-  ReminderUtils,
   removeOldReminders,
 } from "@/utils/ReminderUtils";
-import { NO_DATA, resetAlerm } from "./utils/nodataUtils";
-import { Reminder, SettingsType } from "@/types/types";
+import { NO_DATA } from "./utils/nodataUtils";
+import { loadSettings } from "@/utils/config";
+import { errorText, send } from "@/utils/bg";
+import { canvasHalve, shrinkToLimit } from "@/utils/image";
+import type { Message } from "@/types/messages";
+import { AuthStatus, Fail, Reminder, SettingsType } from "@/types/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 
 import "@/App.css";
 
+type Ok = { ok: true };
+type ListRes = { ok: true; reminders: Reminder[] } | (Fail & { reminders: Reminder[] });
+
+const withNoData = (list: Reminder[]): Reminder[] =>
+  list.some((r) => !r.hidden && r.id !== NO_DATA.id) ? list.filter((r) => r.id !== NO_DATA.id) : [...list.filter((r) => r.id !== NO_DATA.id), NO_DATA];
+
 function App() {
   const [reminderTime, setReminderTime] = useState(createZeroSecCurrentDate);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [settings, setSettings] = useState<SettingsType>(DEFAULT_SETTINGS);
+  const [error, setError] = useState<string | null>(null);
+  // Task 13 の ServerSettings に渡す
+  const [, setAuthStatus] = useState<AuthStatus | null>(null);
+  // 切断（NETWORK）の後、次の操作の前に一覧と状態を読み直す
+  const needsReload = useRef(false);
+
+  const markDisconnected = () => {
+    needsReload.current = true;
+  };
+
+  const call = async <T,>(msg: Message): Promise<T | Fail> => {
+    const r = await send<T>(msg);
+    const f = r as Fail;
+    if (f.ok === false) {
+      if (f.code === "NETWORK") markDisconnected();
+      setError(errorText(f.code, f.status));
+    }
+    return r;
+  };
+
+  const loadAuthStatus = async () => {
+    const r = await call<AuthStatus>({ type: "auth/status" });
+    if (!("ok" in r)) setAuthStatus(r);
+  };
+
+  const showList = (r: ListRes | Fail) => {
+    if ("reminders" in r) setReminders(withNoData(r.reminders));
+  };
+
+  const loadServerList = async () => {
+    showList(await call<ListRes>({ type: "reminders/list" }));
+    showList(await call<ListRes>({ type: "reminders/list", fresh: true }));
+  };
+
+  const loadLocalList = async () => {
+    const { reminders: stored } = await chrome.storage.local.get("reminders");
+    const list = removeOldReminders(Array.isArray(stored) ? stored : []);
+    await chrome.storage.local.set({ reminders: list });
+    setReminders(withNoData(list));
+    await call<Ok>({ type: "alarms/reset" });
+  };
+
+  const ensureFresh = async () => {
+    if (!needsReload.current) return;
+    needsReload.current = false;
+    if (settings.connectionType === "server") showList(await call<ListRes>({ type: "reminders/list", fresh: true }));
+    await loadAuthStatus();
+  };
 
   useEffect(() => {
     (async () => {
@@ -62,48 +119,21 @@ function App() {
     })();
   }, []);
 
+  // 開いた時に一度だけ: 設定、一覧（server は cache → fresh の2段）、認証の状態を読む
   useEffect(() => {
     (async () => {
-      const storage = chrome.storage
-        ? await chrome.storage.local.get(["settings", "reminders"])
-        : {};
-      let localSettings: SettingsType = storage.settings || DEFAULT_SETTINGS;
-      if (localSettings) setSettings(localSettings);
-
-      if (!chrome.storage) {
-        setSettings({ ...localSettings, connectionType: "server" });
-      }
-
-      let storageReminders: Reminder[] = [];
-      if (localSettings.connectionType === "server" || !chrome.storage) {
-        try {
-          const utils = new ReminderUtils(localSettings.apiBaseUrl);
-          storageReminders = await utils.getRemoteReminders();
-          storageReminders = removeOldReminders(storageReminders);
-          utils.setRemoteReminders(storageReminders);
-        } catch (error) {
-          if (chrome.storage) {
-            storageReminders = storage.reminders || [];
-            localSettings = { ...localSettings, connectionType: "local" };
-            setSettings(localSettings);
-            chrome.storage.local.set({ settings: localSettings });
-          }
-          console.log(error);
-        }
-      } else if (chrome.storage) {
-        storageReminders = storage.reminders || [];
-        storageReminders = removeOldReminders(storageReminders);
-        chrome.storage.local.set({ reminders: storageReminders });
-      }
-      if (storageReminders.filter((r) => !r.hidden).length === 0) {
-        storageReminders.push(NO_DATA);
-      }
-      setReminders(storageReminders);
-      resetAlerm(storageReminders);
+      const s = await loadSettings();
+      setSettings(s);
+      if (s.connectionType === "server") await loadServerList();
+      else await loadLocalList();
+      await loadAuthStatus();
     })();
-  }, [settings.connectionType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleAddReminder = async () => {
+    setError(null);
+    await ensureFresh();
     let tab;
     if (chrome.tabs) {
       [tab] = await chrome.tabs.query({
@@ -131,11 +161,20 @@ function App() {
       return;
     }
 
+    const server = settings.connectionType === "server";
+    const capture = await captureVisibleTab();
+    // capture の失敗は NO_DATA の path のまま。縮められなければ画像なし
+    const thumbnail = !capture
+      ? NO_DATA.thumbnail
+      : !server
+        ? capture
+        : ((await shrinkToLimit(capture, canvasHalve).catch(() => null)) ?? NO_DATA.thumbnail);
+
     const reminder: Reminder = {
       id: crypto.randomUUID(),
       url: tab.url,
       title: tab.title,
-      thumbnail: (await captureVisibleTab()) || NO_DATA.thumbnail,
+      thumbnail,
       reminderTime: reminderTime.toISOString(),
       autoOpen: settings.autoOpen,
       webPush: settings.webPush,
@@ -143,58 +182,53 @@ function App() {
       hidden: false,
     };
 
-    let newReminders;
-    const activeReminders = reminders.filter((r) => !r.hidden);
-    if (activeReminders.length === 1 && activeReminders[0].id === NO_DATA.id) {
-      newReminders = [reminder];
-    } else {
-      newReminders = [...reminders, reminder];
+    if (server) {
+      setReminders((cur) => withNoData([...cur, reminder]));
+      const r = await call<{ ok: true; reminder: Reminder }>({ type: "reminders/create", reminder });
+      if (!r.ok) setReminders((cur) => withNoData(cur.filter((x) => x.id !== reminder.id)));
+      return;
     }
+    const newReminders = [...reminders.filter((r) => r.id !== NO_DATA.id), reminder];
     setReminders(newReminders);
-    if (settings.connectionType === "server" || !chrome.storage) {
-      const utils = new ReminderUtils(settings.apiBaseUrl);
-      utils.setRemoteReminders(newReminders);
-    } else {
-      chrome.storage.local.set({ reminders: newReminders });
-    }
-
-    // Set up alarm for the reminder
-    if (chrome.alarms) {
-      chrome.alarms.create(reminder.id, {
-        when: reminderTime.getTime(),
-      });
-    }
+    await chrome.storage.local.set({ reminders: newReminders });
+    await call<Ok>({ type: "alarms/reset" });
   };
 
-  const handleDeleteReminder = (id: string) => {
+  const handleDeleteReminder = async (id: string) => {
+    setError(null);
+    await ensureFresh();
+    const removed = reminders.find((r) => r.id === id);
     const newReminders = reminders.filter((r) => r.id !== id);
-    if (settings.connectionType === "server" || !chrome.storage) {
-      const utils = new ReminderUtils(settings.apiBaseUrl);
-      utils.setRemoteReminders(newReminders);
-    } else {
-      chrome.storage.local.set({ reminders: newReminders });
-    }
+    setReminders(withNoData(newReminders));
 
-    const activeReminders = newReminders.filter((r) => !r.hidden);
-    if (activeReminders.length === 0) {
-      newReminders.push(NO_DATA);
+    if (settings.connectionType === "server") {
+      const r = await call<Ok>({ type: "reminders/delete", id });
+      if (r.ok) return;
+      if (r.code === "CONFLICT") showList(await call<ListRes>({ type: "reminders/list", fresh: true }));
+      else if (removed) setReminders((cur) => withNoData([...cur.filter((x) => x.id !== id), removed]));
+      return;
     }
-    setReminders(newReminders);
-
-    if (chrome.alarms) {
-      chrome.alarms.clear(id);
-    }
+    await chrome.storage.local.set({ reminders: newReminders.filter((r) => r.id !== NO_DATA.id) });
+    await call<Ok>({ type: "alarms/reset" });
   };
 
   const handleOpenReminder = (url: string) => {
     chrome.tabs.create({ url });
   };
 
-  const handleSettingsChange = (newSettings: SettingsType) => {
-    setSettings(newSettings);
-    if (chrome.storage) {
-      chrome.storage.local.set({ settings: newSettings });
+  const handleSettingsChange = async (newSettings: SettingsType) => {
+    if (newSettings.connectionType === settings.connectionType) {
+      setSettings(newSettings);
+      await chrome.storage.local.set({ settings: newSettings });
+      return;
     }
+    setError(null);
+    await ensureFresh();
+    const r = await call<Ok>({ type: "mode/change", connectionType: newSettings.connectionType });
+    if (!r.ok) return;
+    setSettings(newSettings);
+    if (newSettings.connectionType === "server") await loadServerList();
+    else await loadLocalList();
   };
 
   return (
@@ -219,6 +253,7 @@ function App() {
           <Label id="status" className="text-red-500" hidden={true}>
             Past date cannot be set.
           </Label>
+          {error && <Label className="text-red-500">{error}</Label>}
 
           <div className="space-y-4 grid justify-center">
             <h2 className="text-lg font-semibold">Reminders</h2>

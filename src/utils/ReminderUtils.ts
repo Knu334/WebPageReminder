@@ -1,46 +1,4 @@
-import { Reminder, SettingsType, StoragePayloadType } from "@/types/types";
-import axios, { AxiosInstance, CreateAxiosDefaults } from "axios";
-
-export class ReminderUtils {
-  private axiosBase: AxiosInstance;
-
-  constructor(baseUrl: string) {
-    const axiosConfig: CreateAxiosDefaults = {
-      headers: {
-        "Content-Type": "application/json",
-        "X-Requested-With": "XMLHttpRequest",
-      },
-      responseType: "json",
-    };
-    axiosConfig.baseURL = baseUrl;
-    this.axiosBase = axios.create(axiosConfig);
-  }
-
-  private getUserId = async (): Promise<string> => {
-    if (!chrome.identity) return "dummy";
-
-    const userInfo = await chrome.identity.getProfileUserInfo({
-      accountStatus: chrome.identity.AccountStatus.ANY,
-    });
-    return userInfo.id;
-  };
-
-  public getRemoteReminders = async (): Promise<Reminder[]> => {
-    const response = await this.axiosBase.post("/reminders", {
-      key: await this.getUserId(),
-    });
-    const remoteReminders: Reminder[] = response.data || [];
-    return remoteReminders;
-  };
-
-  public setRemoteReminders = async (reminders: Reminder[]) => {
-    const payload: StoragePayloadType = {
-      key: await this.getUserId(),
-      reminders: reminders,
-    };
-    this.axiosBase.put("/reminders", payload);
-  };
-}
+import { Reminder, SettingsType } from "@/types/types";
 
 // 前月の同じ日時。同じ日が無ければ前月の末日
 export const oneMonthBefore = (now: Date): Date => {

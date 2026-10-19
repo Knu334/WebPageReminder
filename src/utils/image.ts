@@ -30,7 +30,9 @@ export const canvasHalve = (dataUrl: string): Promise<Reencoded> =>
       const canvas = document.createElement("canvas");
       canvas.width = Math.floor(img.naturalWidth / 2);
       canvas.height = Math.floor(img.naturalHeight / 2);
-      canvas.getContext("2d")?.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return reject(new Error("no 2d context"));
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       resolve({ dataUrl: canvas.toDataURL("image/jpeg", 0.5), width: canvas.width, height: canvas.height });
     };
     img.onerror = () => reject(new Error("image decode failed"));

@@ -197,18 +197,27 @@ function App() {
   const handleDeleteReminder = async (id: string) => {
     setError(null);
     await ensureFresh();
-    const removed = reminders.find((r) => r.id === id);
-    const newReminders = reminders.filter((r) => r.id !== id);
-    setReminders(withNoData(newReminders));
 
     if (settings.connectionType === "server") {
+      // ensureFresh が一覧を置き換えている場合があるので、閉包の reminders ではなく cur から消す
+      let removed: Reminder | undefined;
+      setReminders((cur) => {
+        removed = cur.find((x) => x.id === id) ?? removed;
+        return withNoData(cur.filter((x) => x.id !== id));
+      });
       const r = await call<Ok>({ type: "reminders/delete", id });
       if (r.ok) return;
       if (r.code === "CONFLICT") showList(await call<ListRes>({ type: "reminders/list", fresh: true }));
-      else if (removed) setReminders((cur) => withNoData([...cur.filter((x) => x.id !== id), removed]));
+      else if (removed) {
+        const back = removed;
+        setReminders((cur) => withNoData([...cur.filter((x) => x.id !== id), back]));
+      }
       return;
     }
-    await chrome.storage.local.set({ reminders: newReminders.filter((r) => r.id !== NO_DATA.id) });
+    // local モードでは ensureFresh は一覧を書き換えないので、閉包の reminders は古くならない
+    const newReminders = reminders.filter((r) => r.id !== id && r.id !== NO_DATA.id);
+    setReminders(withNoData(newReminders));
+    await chrome.storage.local.set({ reminders: newReminders });
     await call<Ok>({ type: "alarms/reset" });
   };
 

@@ -320,8 +320,8 @@ export async function logout(
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ client_id: s.clientId, token: rt }),
-        // 1の bump の後の controller なので、次の login の成功でだけ中断される
-        signal: AbortSignal.any([AbortSignal.timeout(10_000), signalFor(gen)]),
+        // 世代では中断しない: revoke は認証状態に書かず、途中の login で古い token を失効し損ねないため
+        signal: AbortSignal.timeout(10_000),
       });
       revoked = res.status === 200;
       if (!revoked) console.error("revoke failed", res.status);

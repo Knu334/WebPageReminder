@@ -143,8 +143,15 @@ it("logout の後の API は LOGIN_REQUIRED", async () => {
 
 it("revoke 中に成功した新しい login を消さない", async () => {
   let resolveRevoke!: (r: Response) => void;
+  // 本物の fetch と同じく signal の中断で reject する
   fetchMock.mockImplementationOnce(
-    () => new Promise<Response>((r) => (resolveRevoke = r)),
+    (_url: string, init: RequestInit) =>
+      new Promise<Response>((r, rj) => {
+        resolveRevoke = r;
+        init.signal?.addEventListener("abort", () =>
+          rj(new DOMException("aborted", "AbortError")),
+        );
+      }),
   );
   fetchMock.mockResolvedValue(res(200, okBody));
   flowOk();

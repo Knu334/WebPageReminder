@@ -13,7 +13,7 @@ import { loadSettings } from "@/utils/config";
 import { errorText, send } from "@/utils/bg";
 import { canvasHalve, shrinkToLimit } from "@/utils/image";
 import type { Message } from "@/types/messages";
-import { AuthStatus, Fail, Reminder, SettingsType } from "@/types/types";
+import { AuthStatus, ConnectionType, Fail, Reminder, ServerConfig, SettingsType } from "@/types/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -225,19 +225,28 @@ function App() {
     chrome.tabs.create({ url });
   };
 
-  const handleSettingsChange = async (newSettings: SettingsType) => {
-    if (newSettings.connectionType === settings.connectionType) {
-      setSettings(newSettings);
-      await chrome.storage.local.set({ settings: newSettings });
-      return;
-    }
+  // storage の今の値にその field だけを重ねる（background が保存した接続先を巻き込まない）
+  const handleSettingsChange = async (patch: Partial<Pick<SettingsType, "autoOpen" | "webPush">>) => {
+    setSettings((cur) => ({ ...cur, ...patch }));
+    const s = await loadSettings();
+    await chrome.storage.local.set({ settings: { ...s, ...patch } });
+  };
+
+  const handleModeChange = async (connectionType: ConnectionType) => {
+    if (connectionType === settings.connectionType) return;
     setError(null);
     await ensureFresh();
-    const r = await call<Ok>({ type: "mode/change", connectionType: newSettings.connectionType });
+    const r = await call<Ok>({ type: "mode/change", connectionType });
     if (!r.ok) return;
-    setSettings(newSettings);
-    if (newSettings.connectionType === "server") await loadServerList();
+    setSettings((cur) => ({ ...cur, connectionType }));
+    if (connectionType === "server") await loadServerList();
     else await loadLocalList();
+  };
+
+  // 接続先が変わると background が cache を消すので、一覧も読み直す
+  const handleSaved = async (c: ServerConfig) => {
+    setSettings((cur) => ({ ...cur, ...c }));
+    showList(await call<ListRes>({ type: "reminders/list" }));
   };
 
   return (
@@ -280,6 +289,10 @@ function App() {
           <Settings
             settings={settings}
             onSettingsChange={handleSettingsChange}
+            onModeChange={handleModeChange}
+            onSaved={handleSaved}
+            markDisconnected={markDisconnected}
+            ensureFresh={ensureFresh}
           />
         </div>
       </TabsContent>

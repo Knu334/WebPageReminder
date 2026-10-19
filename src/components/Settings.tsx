@@ -1,14 +1,18 @@
 import React from "react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { SettingsType } from "@/types/types";
+import { ConnectionType, ServerConfig, SettingsType } from "@/types/types";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
-import { Input } from "./ui/input";
+import { ServerSettings } from "./ServerSettings";
 
 export const Settings: React.FC<{
   settings: SettingsType;
-  onSettingsChange: (settings: SettingsType) => void;
-}> = ({ settings, onSettingsChange }) => {
+  onSettingsChange: (patch: Partial<Pick<SettingsType, "autoOpen" | "webPush">>) => void;
+  onModeChange: (t: ConnectionType) => void;
+  onSaved: (c: ServerConfig) => void;
+  markDisconnected: () => void;
+  ensureFresh: () => Promise<void>;
+}> = ({ settings, onSettingsChange, onModeChange, onSaved, markDisconnected, ensureFresh }) => {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -16,9 +20,7 @@ export const Settings: React.FC<{
         <Switch
           id="auto-open"
           checked={settings.autoOpen}
-          onCheckedChange={(checked) =>
-            onSettingsChange({ ...settings, autoOpen: checked })
-          }
+          onCheckedChange={(checked) => onSettingsChange({ autoOpen: checked })}
         />
       </div>
       <div className="flex items-center justify-between">
@@ -26,17 +28,13 @@ export const Settings: React.FC<{
         <Switch
           id="web-push"
           checked={settings.webPush}
-          onCheckedChange={(checked) =>
-            onSettingsChange({ ...settings, webPush: checked })
-          }
+          onCheckedChange={(checked) => onSettingsChange({ webPush: checked })}
         />
       </div>
       <div className="flex items-center justify-between">
         <Label>Connection Type</Label>
         <RadioGroup
-          onValueChange={(value) => {
-            onSettingsChange({ ...settings, connectionType: value === "server" ? "server" : "local" });
-          }}
+          onValueChange={(value) => onModeChange(value === "server" ? "server" : "local")}
         >
           <div className="flex items-center space-x-2">
             <RadioGroupItem
@@ -56,15 +54,14 @@ export const Settings: React.FC<{
           </div>
         </RadioGroup>
       </div>
-      <div className="flex w-full items-center">
-        <Input
-          type="url"
-          value={settings.apiBaseUrl}
-          onChange={(e) => {
-            onSettingsChange({ ...settings, apiBaseUrl: e.target.value });
-          }}
+      {settings.connectionType === "server" && (
+        <ServerSettings
+          settings={settings}
+          onSaved={onSaved}
+          markDisconnected={markDisconnected}
+          ensureFresh={ensureFresh}
         />
-      </div>
+      )}
     </div>
   );
 };

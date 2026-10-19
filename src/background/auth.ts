@@ -1,19 +1,23 @@
 import type { AuthNoticeCode, AuthStatus, Fail } from "@/types/types";
 import { configKey, isConfigured, loadSettings, originPatterns } from "@/utils/config";
 import type { TokenResult } from "./api";
-import { isCurrent, signalFor } from "./gen";
-import { sha256Hex } from "./pkce";
+import { bumpGen, isCurrent, signalFor } from "./gen";
+import { codeChallenge, randomToken, sha256Hex } from "./pkce";
 import { createSerial } from "./serial";
 
 type AuthSession = { accessToken: string; expiresAt: number; configKey: string };
 type AuthRefresh = { refreshToken: string; configKey: string };
 type RefreshPending = { refreshTokenHash: string; firstSentAt: number };
-type AuthAttempt = { startedAt: number };
+type AuthAttempt = { state: string; verifier: string; redirectUri: string; configKey: string; startedAt: number };
 type AuthNotice = { code: AuthNoticeCode; at: number };
 
 const STALE: Fail = { ok: false, code: "STALE" };
 const NETWORK: Fail = { ok: false, code: "NETWORK" };
 const LOGIN_REQUIRED: Fail = { ok: false, code: "LOGIN_REQUIRED" };
+const NOT_CONFIGURED: Fail = { ok: false, code: "NOT_CONFIGURED" };
+const LOGIN_CANCELLED: Fail = { ok: false, code: "LOGIN_CANCELLED" };
+const LOGIN_FAILED: Fail = { ok: false, code: "LOGIN_FAILED" };
+const SCOPE = "openid reminder-api/read reminder-api/write";
 const REFRESH_MARGIN = 30_000;
 const ATTEMPT_TTL = 10 * 60_000;
 const RETRY_GRACE = 10_000;
@@ -39,7 +43,7 @@ const refreshFailed = async (): Promise<Fail> => {
   return LOGIN_REQUIRED;
 };
 
-const validTokens = (b: unknown): b is { access_token: string; refresh_token: string; expires_in: number } => {
+const validTokens = (b: unknown): b is Tokens => {
   const t = b as Record<string, unknown> | null;
   return (
     !!t &&
@@ -49,6 +53,16 @@ const validTokens = (b: unknown): b is { access_token: string; refresh_token: st
     typeof t.expires_in === "number" &&
     t.expires_in > 0
   );
+};
+
+type Tokens = { access_token: string; refresh_token: string; expires_in: number };
+
+// authLock の中で呼ぶ: refresh token を先に local へ、そのあと access token を session へ
+const saveTokens = async (t: Tokens, key: string) => {
+  await chrome.storage.local.set({ authRefresh: { refreshToken: t.refresh_token, configKey: key } });
+  await chrome.storage.session.set({
+    authSession: { accessToken: t.access_token, expiresAt: Date.now() + t.expires_in * 1000, configKey: key },
+  });
 };
 
 async function refresh(gen: number, authBaseUrl: string, clientId: string, key: string): Promise<TokenResult> {
@@ -104,10 +118,7 @@ async function refresh(gen: number, authBaseUrl: string, clientId: string, key: 
       await chrome.storage.session.remove("refreshPending");
       if (status >= 200 && status < 300) {
         if (!validTokens(body)) return refreshFailed();
-        await chrome.storage.local.set({ authRefresh: { refreshToken: body.refresh_token, configKey: key } });
-        await chrome.storage.session.set({
-          authSession: { accessToken: body.access_token, expiresAt: Date.now() + body.expires_in * 1000, configKey: key },
-        });
+        await saveTokens(body, key);
         return { ok: true, token: body.access_token };
       }
       if (status === 400 && FATAL_ERRORS.includes(String((body as { error?: unknown } | null)?.error))) return refreshFailed();
@@ -121,6 +132,116 @@ async function refresh(gen: number, authBaseUrl: string, clientId: string, key: 
     }
     return NETWORK;
   }
+}
+
+type LoginResult = { ok: true; gen: number } | Fail;
+
+async function exchange(
+  gen: number,
+  s: { authBaseUrl: string; clientId: string },
+  key: string,
+  a: Pick<AuthAttempt, "state" | "verifier" | "redirectUri" | "startedAt">,
+): Promise<LoginResult> {
+  const url =
+    `${s.authBaseUrl}/oauth2/authorize?` +
+    new URLSearchParams({
+      response_type: "code",
+      client_id: s.clientId,
+      redirect_uri: a.redirectUri,
+      scope: SCOPE,
+      state: a.state,
+      code_challenge: await codeChallenge(a.verifier),
+      code_challenge_method: "S256",
+    });
+  let returned: string | undefined;
+  try {
+    returned = await chrome.identity.launchWebAuthFlow({ url, interactive: true });
+  } catch {
+    return LOGIN_CANCELLED;
+  }
+  if (!returned) return LOGIN_CANCELLED;
+  const cb = new URL(returned);
+  const code = cb.searchParams.get("code");
+  if (
+    cb.origin + cb.pathname !== a.redirectUri ||
+    cb.searchParams.get("state") !== a.state ||
+    Date.now() - a.startedAt > ATTEMPT_TTL ||
+    cb.searchParams.has("error") ||
+    !code
+  )
+    return LOGIN_FAILED;
+  if (!isCurrent(gen)) return STALE;
+
+  let res: Response;
+  let body: unknown = null;
+  try {
+    // 使用済みの code は再送しない
+    res = await fetch(`${s.authBaseUrl}/oauth2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        client_id: s.clientId,
+        code,
+        redirect_uri: a.redirectUri,
+        code_verifier: a.verifier,
+      }),
+      signal: AbortSignal.any([AbortSignal.timeout(10_000), signalFor(gen)]),
+    });
+    body = JSON.parse(await res.text());
+  } catch {
+    return isCurrent(gen) ? LOGIN_FAILED : STALE;
+  }
+  if (!res.ok || !validTokens(body)) {
+    console.error("login failed", res.status);
+    return LOGIN_FAILED;
+  }
+  const tokens = body;
+  return authLock(async (): Promise<LoginResult> => {
+    if (!isCurrent(gen)) return STALE;
+    await saveTokens(tokens, key);
+    await chrome.storage.session.remove("authNotice");
+    return { ok: true, gen: bumpGen() };
+  });
+}
+
+export async function login(gen: number): Promise<LoginResult> {
+  const s = await loadSettings();
+  if (!isConfigured(s) || !(await chrome.permissions.contains({ origins: originPatterns(s) }))) return NOT_CONFIGURED;
+  const key = configKey(s);
+  const attempt = {
+    state: randomToken(),
+    verifier: randomToken(),
+    redirectUri: chrome.identity.getRedirectURL("cognito"),
+    configKey: key,
+    startedAt: 0,
+  };
+  // 確認と予約を同じ区間で行う（試行は1件ずつ）
+  const reserved = await authLock(async (): Promise<Fail | null> => {
+    if (!isCurrent(gen)) return STALE;
+    const { authAttempt: cur } = (await chrome.storage.session.get("authAttempt")) as { authAttempt?: AuthAttempt };
+    if (cur && Date.now() - cur.startedAt < ATTEMPT_TTL) return { ok: false, code: "LOGIN_IN_PROGRESS" };
+    attempt.startedAt = Date.now();
+    await chrome.storage.session.set({ authAttempt: attempt });
+    return null;
+  });
+  if (reserved) return reserved;
+
+  let result: LoginResult = LOGIN_FAILED;
+  try {
+    result = await exchange(gen, s, key, attempt);
+  } catch {
+    result = isCurrent(gen) ? LOGIN_FAILED : STALE;
+  } finally {
+    await authLock(async () => {
+      const { authAttempt: cur } = (await chrome.storage.session.get("authAttempt")) as { authAttempt?: AuthAttempt };
+      if (cur?.state === attempt.state) await chrome.storage.session.remove("authAttempt");
+      // 世代が変わっていれば notice を書かない（logout や新しい login の notice を上書きしない）
+      if (!result.ok && (result.code === "LOGIN_CANCELLED" || result.code === "LOGIN_FAILED") && isCurrent(gen))
+        await setNotice(result.code);
+    });
+  }
+  return result;
 }
 
 const inflight = new Map<number, Promise<TokenResult>>();

@@ -35,7 +35,7 @@ export const Settings: React.FC<{
         <Label>Connection Type</Label>
         <RadioGroup
           onValueChange={(value) => {
-            onSettingsChange({ ...settings, connectionType: value });
+            onSettingsChange({ ...settings, connectionType: value === "server" ? "server" : "local" });
           }}
         >
           <div className="flex items-center space-x-2">
@@ -59,9 +59,9 @@ export const Settings: React.FC<{
       <div className="flex w-full items-center">
         <Input
           type="url"
-          value={settings.url}
+          value={settings.apiBaseUrl}
           onChange={(e) => {
-            onSettingsChange({ ...settings, url: e.target.value });
+            onSettingsChange({ ...settings, apiBaseUrl: e.target.value });
           }}
         />
       </div>

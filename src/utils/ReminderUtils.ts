@@ -99,6 +99,9 @@ export const createZeroSecCurrentDate = (): Date => {
 export const DEFAULT_SETTINGS = {
   autoOpen: true,
   webPush: false,
-  connectionType: "server",
-  url: "http://localhost:3000",
+  connectionType: "local",
+  apiBaseUrl: "",
+  authBaseUrl: "",
+  clientId: "",
+  imageHost: "",
 } as const satisfies SettingsType;

@@ -16,9 +16,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     let reminders: Reminder[];
     const settings = data.settings || {
       connectionType: "local",
-      url: "http://localhost:3000",
+      apiBaseUrl: "",
     };
-    const utils = new ReminderUtils(settings.url);
+    const utils = new ReminderUtils(settings.apiBaseUrl);
 
     if (settings.connectionType === "local") {
       reminders = data.reminders || [];
@@ -82,9 +82,9 @@ chrome.notifications.onClicked.addListener(async (notificationId) => {
   let reminders: Reminder[];
   const settings = data.settings || {
     connectionType: "local",
-    url: "http://localhost:3000",
+    apiBaseUrl: "",
   };
-  const utils = new ReminderUtils(settings.url);
+  const utils = new ReminderUtils(settings.apiBaseUrl);
 
   if (settings.connectionType === "local") {
     reminders = data.reminders || [];

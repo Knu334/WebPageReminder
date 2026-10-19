@@ -77,7 +77,7 @@ function App() {
       let storageReminders: Reminder[] = [];
       if (localSettings.connectionType === "server" || !chrome.storage) {
         try {
-          const utils = new ReminderUtils(localSettings.url);
+          const utils = new ReminderUtils(localSettings.apiBaseUrl);
           storageReminders = await utils.getRemoteReminders();
           storageReminders = removeOldReminders(storageReminders);
           utils.setRemoteReminders(storageReminders);
@@ -152,7 +152,7 @@ function App() {
     }
     setReminders(newReminders);
     if (settings.connectionType === "server" || !chrome.storage) {
-      const utils = new ReminderUtils(settings.url);
+      const utils = new ReminderUtils(settings.apiBaseUrl);
       utils.setRemoteReminders(newReminders);
     } else {
       chrome.storage.local.set({ reminders: newReminders });
@@ -169,7 +169,7 @@ function App() {
   const handleDeleteReminder = (id: string) => {
     const newReminders = reminders.filter((r) => r.id !== id);
     if (settings.connectionType === "server" || !chrome.storage) {
-      const utils = new ReminderUtils(settings.url);
+      const utils = new ReminderUtils(settings.apiBaseUrl);
       utils.setRemoteReminders(newReminders);
     } else {
       chrome.storage.local.set({ reminders: newReminders });

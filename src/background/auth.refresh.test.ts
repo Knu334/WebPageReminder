@@ -33,26 +33,26 @@ beforeEach(async () => {
   vi.stubGlobal("fetch", fetchMock);
 });
 
-it("期限まで30秒より多ければ token endpoint を呼ばない", async () => {
+it("R-TOKEN-01: 期限まで30秒より多ければ token endpoint を呼ばない", async () => {
   session()._data.authSession = { accessToken: "a1", expiresAt: Date.now() + 31_000, configKey: KEY };
   expect(await auth.getAccessToken(g.currentGen())).toEqual({ ok: true, token: "a1" });
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-it("30秒以下なら refresh する", async () => {
+it("R-TOKEN-02: 30秒以下なら refresh する", async () => {
   session()._data.authSession = { accessToken: "a1", expiresAt: Date.now() + 30_000, configKey: KEY };
   fetchMock.mockResolvedValue(res(200, okBody()));
   expect(await auth.getAccessToken(g.currentGen())).toEqual({ ok: true, token: "a2" });
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
-it("force は30秒の判定を飛ばす", async () => {
+it("R-TOKEN-02: force は30秒の判定を飛ばす", async () => {
   session()._data.authSession = { accessToken: "a1", expiresAt: Date.now() + 3_600_000, configKey: KEY };
   fetchMock.mockResolvedValue(res(200, okBody()));
   expect(await auth.getAccessToken(g.currentGen(), { force: true })).toEqual({ ok: true, token: "a2" });
 });
 
-it("同時の3回で token endpoint は1回", async () => {
+it("R-TOKEN-02: 同時の3回で token endpoint は1回", async () => {
   fetchMock.mockImplementation(async () => res(200, okBody()));
   const gen = g.currentGen();
   const rs = await Promise.all([auth.getAccessToken(gen), auth.getAccessToken(gen), auth.getAccessToken(gen, { force: true })]);
@@ -60,7 +60,7 @@ it("同時の3回で token endpoint は1回", async () => {
   expect(rs).toEqual([1, 2, 3].map(() => ({ ok: true, token: "a2" })));
 });
 
-it("新しい refresh token を access token より先に保存する", async () => {
+it("R-REFRESH-03 R-REFRESH-01 R-REFRESH-06 R-STO-04: 新しい refresh token を access token より先に保存する", async () => {
   const order: string[] = [];
   local().set.mockImplementation(async (o: Record<string, unknown>) => {
     order.push(...Object.keys(o).map((k) => "local:" + k));
@@ -86,7 +86,7 @@ it("新しい refresh token を access token より先に保存する", async ()
   expect(Object.keys(init.headers).map((k) => k.toLowerCase())).not.toContain("authorization");
 });
 
-it("refresh_token の無い応答は失敗", async () => {
+it("R-REFRESH-02 R-STO-03: refresh_token の無い応答は失敗", async () => {
   const body: Partial<ReturnType<typeof okBody>> = okBody();
   delete body.refresh_token;
   fetchMock.mockResolvedValue(res(200, body));
@@ -96,7 +96,7 @@ it("refresh_token の無い応答は失敗", async () => {
   expect(session()._data.authSession).toBeUndefined();
 });
 
-it("token_type・expires_in が不正なら保存しない", async () => {
+it("R-REFRESH-02: token_type・expires_in が不正なら保存しない", async () => {
   for (const bad of [{ token_type: "bearer" }, { expires_in: 0 }, { expires_in: "3600" }]) {
     local()._data.authRefresh = { refreshToken: "r1", configKey: KEY };
     fetchMock.mockResolvedValue(res(200, { ...okBody(), ...bad }));
@@ -106,7 +106,7 @@ it("token_type・expires_in が不正なら保存しない", async () => {
   }
 });
 
-it("invalid_grant で認証状態を消す", async () => {
+it("R-REFRESH-04 R-REFRESH-06 R-STO-03: invalid_grant で認証状態を消す", async () => {
   session()._data.authSession = { accessToken: "a1", expiresAt: Date.now() + 1_000, configKey: KEY };
   fetchMock.mockResolvedValue(res(400, { error: "invalid_grant" }));
   expect(await auth.getAccessToken(g.currentGen())).toEqual({ ok: false, code: "LOGIN_REQUIRED" });
@@ -116,7 +116,7 @@ it("invalid_grant で認証状態を消す", async () => {
   expect((session()._data.authNotice as { code: string }).code).toBe("REFRESH_FAILED");
 });
 
-it("通信障害では消さない", async () => {
+it("R-REFRESH-07: 通信障害では消さない", async () => {
   fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
   expect(await auth.getAccessToken(g.currentGen())).toEqual({ ok: false, code: "NETWORK" });
   expect(fetchMock).toHaveBeenCalledTimes(3); // 初回 + backoff 0.5秒・1秒
@@ -125,7 +125,7 @@ it("通信障害では消さない", async () => {
   expect(session()._data.authNotice).toBeUndefined();
 });
 
-it("5xx は refreshPending を消して backoff で再送する", async () => {
+it("R-REFRESH-09: 5xx は refreshPending を消して backoff で再送する", async () => {
   const pendings: unknown[] = [];
   fetchMock
     .mockImplementationOnce(async () => {
@@ -144,7 +144,7 @@ it("5xx は refreshPending を消して backoff で再送する", async () => {
   expect(session()._data.refreshPending).toBeUndefined();
 });
 
-it("10秒を過ぎた refreshPending があれば送らない", async () => {
+it("R-REFRESH-05 R-REFRESH-07 R-STO-03: 10秒を過ぎた refreshPending があれば送らない", async () => {
   const pending = { refreshTokenHash: await pkce.sha256Hex("r1"), firstSentAt: Date.now() - 11_000 };
   session()._data.refreshPending = { ...pending };
   expect(await auth.getAccessToken(g.currentGen())).toEqual({ ok: false, code: "LOGIN_REQUIRED" });
@@ -160,7 +160,7 @@ it("10秒を過ぎた refreshPending があれば送らない", async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-it("10秒以内の refreshPending は再送する", async () => {
+it("R-REFRESH-07 R-REFRESH-08: 10秒以内の refreshPending は再送する", async () => {
   const firstSentAt = Date.now() - 5_000;
   session()._data.refreshPending = { refreshTokenHash: await pkce.sha256Hex("r1"), firstSentAt };
   let seen: unknown;
@@ -172,7 +172,7 @@ it("10秒以内の refreshPending は再送する", async () => {
   expect(seen).toMatchObject({ firstSentAt });
 });
 
-it("世代が変わった応答は捨てる", async () => {
+it("R-REFRESH-03 R-GEN-01: 世代が変わった応答は捨てる", async () => {
   fetchMock.mockImplementation(async () => {
     g.bumpGen();
     return res(200, okBody());
@@ -186,14 +186,14 @@ it("世代が変わった応答は捨てる", async () => {
   expect(session()._data.authSession).toBeUndefined();
 });
 
-it("古い世代の呼び出しは STALE", async () => {
+it("R-GEN-02: 古い世代の呼び出しは STALE", async () => {
   const gen = g.currentGen();
   g.bumpGen();
   expect(await auth.getAccessToken(gen)).toEqual({ ok: false, code: "STALE" });
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-it("configKey が違う認証状態は使わずに消す", async () => {
+it("R-CFG-07 R-TOKEN-01: configKey が違う認証状態は使わずに消す", async () => {
   local()._data.authRefresh = { refreshToken: "r1", configKey: "old" };
   session()._data.authSession = { accessToken: "a1", expiresAt: Date.now() + 3_600_000, configKey: "old" };
   expect(await auth.getAccessToken(g.currentGen())).toEqual({ ok: false, code: "LOGIN_REQUIRED" });
@@ -202,23 +202,23 @@ it("configKey が違う認証状態は使わずに消す", async () => {
   expect(session()._data.authSession).toBeUndefined();
 });
 
-it("未設定なら NOT_CONFIGURED", async () => {
+it("R-TOKEN-02: 未設定なら NOT_CONFIGURED", async () => {
   local()._data.settings = { autoOpen: true, webPush: true, connectionType: "server" };
   expect(await auth.getAccessToken(g.currentGen())).toEqual({ ok: false, code: "NOT_CONFIGURED" });
 });
 
-it("authRefresh が無ければ LOGIN_REQUIRED", async () => {
+it("R-TOKEN-02: authRefresh が無ければ LOGIN_REQUIRED", async () => {
   delete local()._data.authRefresh;
   expect(await auth.getAccessToken(g.currentGen())).toEqual({ ok: false, code: "LOGIN_REQUIRED" });
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-it("storage の例外でも throw しない", async () => {
+it("R-TOKEN-02: storage の例外でも throw しない", async () => {
   (chrome.storage.local.get as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("boom"));
   expect(await auth.getAccessToken(g.currentGen())).toMatchObject({ ok: false });
 });
 
-it("getAuthStatus", async () => {
+it("R-STATUS-01: getAuthStatus", async () => {
   const contains = chrome.permissions.contains as ReturnType<typeof vi.fn>;
   expect(await auth.getAuthStatus()).toEqual({
     configured: true,
@@ -249,7 +249,7 @@ it("getAuthStatus", async () => {
   expect(await auth.getAuthStatus()).toMatchObject({ configured: false, permitted: false, state: "LOGGED_OUT" });
 });
 
-it("clearAuth は authSession・authRefresh・refreshPending を消す", async () => {
+it("R-REFRESH-04 R-STO-09: clearAuth は authSession・authRefresh・refreshPending を消す", async () => {
   session()._data.authSession = { accessToken: "a1", expiresAt: 0, configKey: KEY };
   session()._data.refreshPending = { refreshTokenHash: "h", firstSentAt: 0 };
   session()._data.authNotice = { code: "LOGGED_OUT", at: 0 };

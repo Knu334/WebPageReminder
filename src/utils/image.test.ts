@@ -5,7 +5,7 @@ const MiB = 1_048_576;
 // decode 後の大きさが bytes になる data URL（bytes は3の倍数）
 const urlOf = (bytes: number) => "data:image/jpeg;base64," + "A".repeat((bytes / 3) * 4);
 
-describe("decodedSize", () => {
+describe("R-CRUD-04: decodedSize", () => {
   it("counts bytes", () => {
     expect(decodedSize("data:image/png;base64,QUJD")).toBe(3);
     expect(decodedSize("data:image/png;base64,QUI=")).toBe(2);
@@ -13,7 +13,7 @@ describe("decodedSize", () => {
   });
 });
 
-describe("shrinkToLimit", () => {
+describe("R-CRUD-04: shrinkToLimit", () => {
   it("returns input as is when within the limit", async () => {
     const reencode = vi.fn();
     const u = urlOf(MiB - 1);

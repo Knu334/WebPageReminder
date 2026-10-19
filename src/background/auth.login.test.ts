@@ -36,7 +36,7 @@ beforeEach(async () => {
   vi.stubGlobal("fetch", fetchMock);
 });
 
-it("authorize の URL", async () => {
+it("R-LOGIN-06 R-LOGIN-05: authorize の URL", async () => {
   callback();
   fetchMock.mockResolvedValue(res(200, okBody));
   await auth.login(g.currentGen());
@@ -56,7 +56,7 @@ it("authorize の URL", async () => {
   });
 });
 
-it("code を交換して保存する", async () => {
+it("R-LOGIN-08 R-LOGIN-09 R-LOGIN-10 R-LOGIN-05 R-STO-01 R-STO-04: code を交換して保存する", async () => {
   session()._data.authNotice = { code: "LOGIN_FAILED", at: 1 };
   callback();
   const order: string[] = [];
@@ -115,7 +115,7 @@ it.each([
   ],
   ["error=access_denied", () => callback("error=access_denied&code=c1"), "LOGIN_FAILED"],
   ["code 無し", () => callback("x=1"), "LOGIN_FAILED"],
-])("交換しない callback: %s", async (_, setup, code) => {
+])("R-LOGIN-07 R-STO-03: 交換しない callback: %s", async (_, setup, code) => {
   setup();
   expect(await auth.login(g.currentGen())).toEqual({ ok: false, code });
   expect(fetchMock).not.toHaveBeenCalled();
@@ -127,7 +127,7 @@ it.each([
 it.each([
   ["token_type 小文字", { ...okBody, token_type: "bearer" }],
   ["expires_in 0", { ...okBody, expires_in: 0 }],
-])("応答の検証: %s", async (_, body) => {
+])("R-LOGIN-09: 応答の検証: %s", async (_, body) => {
   callback();
   fetchMock.mockResolvedValue(res(200, body));
   const gen = g.currentGen();
@@ -138,14 +138,14 @@ it.each([
   expect(g.currentGen()).toBe(gen);
 });
 
-it("交換が 400 なら LOGIN_FAILED で、code を再送しない", async () => {
+it("R-LOGIN-08: 交換が 400 なら LOGIN_FAILED で、code を再送しない", async () => {
   callback();
   fetchMock.mockResolvedValue(res(400, { error: "invalid_grant" }));
   expect(await auth.login(g.currentGen())).toEqual({ ok: false, code: "LOGIN_FAILED" });
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
-it("同時の2回の login で試行は1つ", async () => {
+it("R-LOGIN-03: 同時の2回の login で試行は1つ", async () => {
   let resolve!: (v: string) => void;
   flow().mockImplementation(({ url }: { url: string }) => new Promise((r) => (resolve = () => r(`${REDIRECT}?code=c1&state=${stateOf(url)}`))));
   fetchMock.mockResolvedValue(res(200, okBody));
@@ -159,7 +159,7 @@ it("同時の2回の login で試行は1つ", async () => {
   expect(await p1).toEqual({ ok: true, gen: gen + 1 });
 });
 
-it("古い試行の finally が新しい試行を消さない", async () => {
+it("R-LOGIN-11 R-STO-02: 古い試行の finally が新しい試行を消さない", async () => {
   let reject!: () => void;
   flow().mockImplementation(() => new Promise((_, rj) => (reject = () => rj(new Error("closed")))));
   const p = auth.login(g.currentGen());
@@ -171,7 +171,7 @@ it("古い試行の finally が新しい試行を消さない", async () => {
   expect(session()._data.authAttempt).toEqual(other);
 });
 
-it("logout 後に完了した login は保存しない", async () => {
+it("R-LOGIN-10 R-GEN-01: logout 後に完了した login は保存しない", async () => {
   flow().mockImplementation(async ({ url }: { url: string }) => {
     g.bumpGen();
     return `${REDIRECT}?code=c1&state=${stateOf(url)}`;
@@ -183,7 +183,7 @@ it("logout 後に完了した login は保存しない", async () => {
   expect(session()._data.authAttempt).toBeUndefined();
 });
 
-it("許可が無ければ NOT_CONFIGURED", async () => {
+it("R-LOGIN-02: 許可が無ければ NOT_CONFIGURED", async () => {
   (chrome.permissions.contains as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(false);
   expect(await auth.login(g.currentGen())).toEqual({ ok: false, code: "NOT_CONFIGURED" });
   expect(flow()).not.toHaveBeenCalled();

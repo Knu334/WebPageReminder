@@ -27,4 +27,5 @@ jobs:
       - if: ${{ steps.node_modules_cache_id.outputs.cache-hit != 'true' }}
         run: npm install
       - run: npm test
+      - run: npm run trace:check
       - run: npm run build

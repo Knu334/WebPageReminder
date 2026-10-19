@@ -31,7 +31,7 @@ it.each([
   ["hidden", "h", () => {}],
   ["1分より先", "f", () => {}],
   ["cache に無い", "missing", () => {}],
-])("通知済み・hidden・1分より先・cache に無い項目は通知しない: %s", async (_, id, setup) => {
+])("R-ALARM-02: 通知済み・hidden・1分より先・cache に無い項目は通知しない: %s", async (_, id, setup) => {
   store().serverCache = serverCache([
     dto("a"),
     dto("h", { hidden: true }),
@@ -44,7 +44,7 @@ it.each([
   expect(h.hide).not.toHaveBeenCalled();
 });
 
-it("通知の前に notified:<id> を書く", async () => {
+it("R-ALARM-03: 通知の前に notified:<id> を書く", async () => {
   store().serverCache = serverCache([dto("a")]);
   let atCreate: unknown;
   ch().notifications.create.mockImplementation(async () => (atCreate = store()["notified:a"]));
@@ -54,7 +54,7 @@ it("通知の前に notified:<id> を書く", async () => {
   expect(ch().tabs.create).toHaveBeenCalledWith({ url: "https://e.example.com/", active: true });
 });
 
-it("通知の後に hideOnServer を呼び、失敗しても例外を投げない", async () => {
+it("R-ALARM-03 R-LOG-01: 通知の後に hideOnServer を呼び、失敗しても例外を投げない", async () => {
   store().serverCache = serverCache([dto("a"), dto("b")]);
   vi.spyOn(console, "error").mockImplementation(() => {});
   h.hide.mockResolvedValueOnce({ ok: false, code: "NETWORK" });
@@ -66,7 +66,7 @@ it("通知の後に hideOnServer を呼び、失敗しても例外を投げな�
   expect(console.error).toHaveBeenCalledWith("hide failed", "NETWORK", undefined);
 });
 
-it("local モードは今の動作（hidden を true にして保存）", async () => {
+it("R-STO-06: local モードは今の動作（hidden を true にして保存）", async () => {
   store().settings = { connectionType: "local" };
   store().reminders = [
     { id: "l1", url: "https://l.example.com/", title: "L", thumbnail: "data:x", reminderTime: SOON(), autoOpen: false, webPush: true, createdAt: "", hidden: false },
@@ -84,7 +84,7 @@ it("local モードは今の動作（hidden を true にして保存）", async 
   expect(ch().notifications.create).toHaveBeenCalledTimes(1);
 });
 
-it("通知の click で cache の URL を開いて通知を消す", async () => {
+it("R-ALARM-01: 通知の click で cache の URL を開いて通知を消す", async () => {
   store().serverCache = serverCache([dto("a")]);
   await n.handleNotificationClick("a");
   expect(ch().tabs.create).toHaveBeenCalledWith({ url: "https://e.example.com/" });

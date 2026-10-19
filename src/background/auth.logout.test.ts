@@ -66,7 +66,7 @@ beforeEach(async () => {
   vi.stubGlobal("fetch", fetchMock);
 });
 
-it("revoke の form", async () => {
+it("R-LOGOUT-02 R-LOGOUT-06: revoke の form", async () => {
   const order: string[] = [];
   fetchMock.mockImplementation(async () => (order.push("revoke"), res(200)));
   const gen = g.currentGen();
@@ -105,7 +105,7 @@ it("revoke の form", async () => {
 it.each([
   ["reject", () => fetchMock.mockRejectedValue(new TypeError("net"))],
   ["503", () => fetchMock.mockResolvedValue(res(503))],
-])("revoke が失敗しても端末の状態は消える: %s", async (_, setup) => {
+])("R-LOGOUT-02 R-LOGOUT-05 R-STO-03: revoke が失敗しても端末の状態は消える: %s", async (_, setup) => {
   setup();
   flowOk();
   expect(await auth.logout(vi.fn(async () => {}))).toEqual({ revoked: false });
@@ -114,14 +114,14 @@ it.each([
   expect(notice()).toBe("REVOKE_FAILED");
 });
 
-it("logout page の失敗", async () => {
+it("R-LOGOUT-04: logout page の失敗", async () => {
   fetchMock.mockResolvedValue(res(200));
   flow().mockRejectedValue(new Error("closed"));
   expect(await auth.logout(vi.fn(async () => {}))).toEqual({ revoked: true });
   expect(notice()).toBe("LOGOUT_PAGE_FAILED");
 });
 
-it("refresh token が無ければ revoke を送らない", async () => {
+it("R-LOGOUT-02: refresh token が無ければ revoke を送らない", async () => {
   delete local()._data.authRefresh;
   flowOk();
   expect(await auth.logout(vi.fn(async () => {}))).toEqual({ revoked: true });
@@ -129,7 +129,7 @@ it("refresh token が無ければ revoke を送らない", async () => {
   expect(notice()).toBe("LOGGED_OUT");
 });
 
-it("logout の後の API は LOGIN_REQUIRED", async () => {
+it("R-LOGOUT-01: logout の後の API は LOGIN_REQUIRED", async () => {
   fetchMock.mockResolvedValue(res(200));
   flowOk();
   await auth.logout(vi.fn(async () => {}));
@@ -141,7 +141,7 @@ it("logout の後の API は LOGIN_REQUIRED", async () => {
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-it("revoke 中に成功した新しい login を消さない", async () => {
+it("R-LOGOUT-05 R-GEN-01: revoke 中に成功した新しい login を消さない", async () => {
   let resolveRevoke!: (r: Response) => void;
   // 本物の fetch と同じく signal の中断で reject する
   fetchMock.mockImplementationOnce(
@@ -168,7 +168,7 @@ it("revoke 中に成功した新しい login を消さない", async () => {
   expect(session()._data.authNotice).toBeUndefined();
 });
 
-it("login の保存と logout の消去を交互にしても復活しない", async () => {
+it("R-GEN-01 R-GEN-03: login の保存と logout の消去を交互にしても復活しない", async () => {
   delete local()._data.authRefresh;
   delete session()._data.authSession;
   fetchMock.mockResolvedValue(res(200, okBody));

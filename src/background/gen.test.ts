@@ -7,7 +7,7 @@ beforeEach(async () => {
   g = await import("@/background/gen");
 });
 
-it("bumpGen aborts previous", () => {
+it("R-GEN-01 R-GEN-05: bumpGen aborts previous", () => {
   const a = g.bumpGen();
   const s = g.signalFor(a);
   expect(s.aborted).toBe(false);

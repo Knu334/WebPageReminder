@@ -4,7 +4,7 @@ import { errorText, makeCall, send } from "@/utils/bg";
 const NET = "通信できません。時間をおいて再度お試しください";
 
 describe("errorText", () => {
-  it("maps the spec table", () => {
+  it("R-ERR-01 R-ERR-02 R-ERR-03 R-ERR-04 R-ERR-06 R-ERR-07 R-ERR-08 R-ERR-09: maps the spec table", () => {
     expect(errorText("NOT_CONFIGURED")).toBe("接続先を設定してください");
     expect(errorText("LOGIN_REQUIRED")).toBe("ログインしてください");
     expect(errorText("UNAUTHORIZED")).toBe("ログインしてください");
@@ -17,13 +17,13 @@ describe("errorText", () => {
     expect(errorText("FORBIDDEN", 403)).toBe("権限がありません（FORBIDDEN）");
     expect(errorText("HTTP_403", 403)).toBe("権限がありません（HTTP_403）");
   });
-  it("hides STALE and formats unknown", () => {
+  it("R-ERR-05 R-ERR-10: hides STALE and formats unknown", () => {
     expect(errorText("STALE")).toBeNull();
     expect(errorText("X")).toBe("エラー（X）");
   });
 });
 
-describe("send", () => {
+describe("R-MSG-12: send", () => {
   it("returns the response", async () => {
     vi.mocked(chrome.runtime.sendMessage).mockResolvedValue({ ok: true } as never);
     expect(await send({ type: "alarms/reset" })).toEqual({ ok: true });
@@ -34,7 +34,7 @@ describe("send", () => {
   });
 });
 
-describe("makeCall", () => {
+describe("R-MSG-12 R-CRUD-07: makeCall", () => {
   const setup = () => {
     const setError = vi.fn();
     const markDisconnected = vi.fn();

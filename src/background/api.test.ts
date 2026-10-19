@@ -19,14 +19,14 @@ beforeEach(async () => {
   vi.stubGlobal("fetch", fetchMock);
 });
 
-it("送る前に世代を確かめる", async () => {
+it("R-GEN-02 R-API-01: 送る前に世代を確かめる", async () => {
   const api = mk();
   g.bumpGen();
   expect(await api.listPage(null)).toEqual({ ok: false, code: "STALE" });
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-it("Bearer と JSON を付ける", async () => {
+it("R-API-01 R-API-11: Bearer と JSON を付ける", async () => {
   fetchMock.mockResolvedValue(res(201, { id: "a" }, { ETag: '"e1"' }));
   const api = mk();
   const r = await api.createReminder({ id: "a", url: "u", title: "t", reminderTime: "x", autoOpen: true, webPush: false, hidden: false, thumbnail: null });
@@ -40,7 +40,7 @@ it("Bearer と JSON を付ける", async () => {
   expect(fetchMock.mock.calls[1][0]).toBe("https://api.test/v2/reminders/a%2Fb");
 });
 
-it("401 で1回だけ force refresh して再送する", async () => {
+it("R-API-04: 401 で1回だけ force refresh して再送する", async () => {
   fetchMock.mockResolvedValueOnce(res(401)).mockResolvedValueOnce(res(200, {}));
   expect((await mk().getReminder("a")).ok).toBe(true);
   expect(getToken).toHaveBeenCalledWith(expect.any(Number), { force: true });
@@ -52,7 +52,7 @@ it("401 で1回だけ force refresh して再送する", async () => {
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
-it("429 は Retry-After と jitter で最大2回", async () => {
+it("R-API-06: 429 は Retry-After と jitter で最大2回", async () => {
   fetchMock.mockResolvedValueOnce(res(429, {}, { "Retry-After": "3" })).mockResolvedValueOnce(res(200, {}));
   expect((await mk().getReminder("a")).ok).toBe(true);
   expect(sleep).toHaveBeenCalledWith(3500);
@@ -62,14 +62,14 @@ it("429 は Retry-After と jitter で最大2回", async () => {
   expect(fetchMock).toHaveBeenCalledTimes(3);
 });
 
-it("JSON でない 429 は1秒待つ", async () => {
+it("R-API-06: JSON でない 429 は1秒待つ", async () => {
   fetchMock.mockImplementation(async () => res(429, "<html>"));
   const r = await mk().getReminder("a");
   expect(sleep).toHaveBeenCalledWith(1500);
   expect(r).toEqual({ ok: false, code: "HTTP_429", status: 429 });
 });
 
-it("GET の通信障害は 0.5秒・1秒で最大2回、書き込みは再送しない", async () => {
+it("R-API-07 R-API-08: GET の通信障害は 0.5秒・1秒で最大2回、書き込みは再送しない", async () => {
   fetchMock.mockRejectedValue(new TypeError("x"));
   const api = mk();
   expect(await api.listPage(null)).toEqual({ ok: false, code: "NETWORK" });
@@ -82,7 +82,7 @@ it("GET の通信障害は 0.5秒・1秒で最大2回、書き込みは再送し
   expect(await api.deleteReminder("a", '"e"')).toEqual({ ok: false, code: "UNKNOWN_RESULT" });
 });
 
-it("PATCH と DELETE に If-Match を付ける", async () => {
+it("R-API-13 R-API-14: PATCH と DELETE に If-Match を付ける", async () => {
   fetchMock.mockResolvedValue(res(200, {}, { ETag: '"e2"' }));
   const api = mk();
   const r = await api.patchReminder("a", { hidden: true, thumbnail: null }, '"e1"');
@@ -92,13 +92,13 @@ it("PATCH と DELETE に If-Match を付ける", async () => {
   expect(fetchMock.mock.calls[1][1].headers["If-Match"]).toBe('"e1"');
 });
 
-it("403 は再試行しない", async () => {
+it("R-API-05: 403 は再試行しない", async () => {
   fetchMock.mockResolvedValue(res(403, "<html>"));
   expect(await mk().getReminder("a")).toEqual({ ok: false, code: "HTTP_403", status: 403 });
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
-it("token が取れなければ code を返し、abort は STALE", async () => {
+it("R-API-03 R-GEN-02: token が取れなければ code を返し、abort は STALE", async () => {
   getToken.mockResolvedValue({ ok: false, code: "LOGIN_REQUIRED" });
   expect(await mk().getReminder("a")).toEqual({ ok: false, code: "LOGIN_REQUIRED" });
   getToken.mockResolvedValue({ ok: true, token: "t" });
@@ -110,14 +110,14 @@ it("token が取れなければ code を返し、abort は STALE", async () => {
   expect(await api.getReminder("a")).toEqual({ ok: false, code: "STALE" });
 });
 
-it("force refresh は 401 の直後の1回だけ", async () => {
+it("R-API-04: force refresh は 401 の直後の1回だけ", async () => {
   fetchMock.mockResolvedValueOnce(res(401)).mockResolvedValueOnce(res(429)).mockResolvedValueOnce(res(200, {}));
   expect((await mk().getReminder("a")).ok).toBe(true);
   expect(getToken.mock.calls.filter((c) => c[1]?.force)).toHaveLength(1);
   expect(getToken).toHaveBeenCalledTimes(3);
 });
 
-it("body の読み取り失敗は通信障害として扱う", async () => {
+it("R-API-03 R-API-07: body の読み取り失敗は通信障害として扱う", async () => {
   const broken = () => {
     const r = res(200, {});
     vi.spyOn(r, "text").mockRejectedValue(new TypeError("reset"));
@@ -132,7 +132,7 @@ it("body の読み取り失敗は通信障害として扱う", async () => {
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
-it("2xx で JSON が壊れていれば BAD_RESPONSE", async () => {
+it("R-API-03: 2xx で JSON が壊れていれば BAD_RESPONSE", async () => {
   fetchMock.mockResolvedValue(res(200, "<html>"));
   expect(await mk().getReminder("a")).toEqual({ ok: false, code: "BAD_RESPONSE", status: 200 });
 });

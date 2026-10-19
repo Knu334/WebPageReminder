@@ -78,13 +78,13 @@ beforeEach(async () => {
   SHA = await p.sha256Hex(BYTES.slice().buffer);
 });
 
-it("pickRandom は重複なく n 件まで選ぶ", () => {
+it("R-SYNC-05 R-SYNC-08: pickRandom は重複なく n 件まで選ぶ", () => {
   expect(s.pickRandom([1, 2, 3, 4], 2, () => 0)).toEqual([1, 2]);
   expect(s.pickRandom([1, 2, 3, 4], 9, () => 0.99).sort()).toEqual([1, 2, 3, 4]);
   expect(new Set(s.pickRandom([...Array(40).keys()], 30)).size).toBe(30);
 });
 
-it("空の items で nextCursor が残る page を読み続ける", async () => {
+it("R-SYNC-04 R-SYNC-18: 空の items で nextCursor が残る page を読み続ける", async () => {
   script({ LIST: [page([dto("a")], "c1"), page([], "c2"), page([dto("b")])] });
   const r = await s.listReminders(g.currentGen(), true);
   expect(h.calls.filter((x) => x.route === "LIST").map((x) => x.args[0])).toEqual([null, "c1", "c2"]);
@@ -93,26 +93,26 @@ it("空の items で nextCursor が残る page を読み続ける", async () => 
   expect(r).toEqual({ ok: true, reminders: [expect.objectContaining({ id: "a" }), expect.objectContaining({ id: "b" })] });
 });
 
-it("fresh でなければ通信しない", async () => {
+it("R-SYNC-01: fresh でなければ通信しない", async () => {
   store().serverCache = cache([dto("a")]);
   expect(await s.listReminders(g.currentGen(), false)).toEqual({ ok: true, reminders: [expect.objectContaining({ id: "a" })] });
   expect(h.calls).toEqual([]);
 });
 
-it("60秒以内は同期しない", async () => {
+it("R-SYNC-02: 60秒以内は同期しない", async () => {
   store().serverCache = cache([dto("a")], { syncedAt: Date.now() - 59_000 });
   expect(await s.listReminders(g.currentGen(), true)).toEqual({ ok: true, reminders: [expect.objectContaining({ id: "a" })] });
   expect(h.calls).toEqual([]);
 });
 
-it("同時の fresh は1回の同期", async () => {
+it("R-SYNC-02: 同時の fresh は1回の同期", async () => {
   script({ LIST: [page([dto("a")]), page([dto("b")])] });
   const [r1, r2] = await Promise.all([s.listReminders(g.currentGen(), true), s.listReminders(g.currentGen(), true)]);
   expect(count("LIST")).toBe(1);
   expect(r1).toEqual(r2);
 });
 
-it("整理は書き込み30件まで", async () => {
+it("R-SYNC-05 R-SYNC-07: 整理は書き込み30件まで", async () => {
   const items = [...Array(40).keys()].map((i) => dto(`r${i}`, { reminderTime: i % 2 ? OLD : PAST }));
   const byId = (id: unknown) => items.find((d) => d.id === id)!;
   script({
@@ -126,7 +126,7 @@ it("整理は書き込み30件まで", async () => {
   expect(stored().items.length).toBe(40 - count("DELETE"));
 });
 
-it("1か月より前は DELETE だけ", async () => {
+it("R-SYNC-06: 1か月より前は DELETE だけ", async () => {
   script({
     LIST: [page([dto("r1", { reminderTime: OLD })])],
     GET: [ok(dto("r1", { reminderTime: OLD }))],
@@ -138,7 +138,7 @@ it("1か月より前は DELETE だけ", async () => {
   expect(stored().items).toEqual([]);
 });
 
-it("整理の1件の失敗が後続を止めない", async () => {
+it("R-SYNC-05 R-SYNC-07: 整理の1件の失敗が後続を止めない", async () => {
   const items = [dto("r1", { reminderTime: PAST }), dto("r2", { reminderTime: PAST })];
   let n = 0;
   script({
@@ -151,7 +151,7 @@ it("整理の1件の失敗が後続を止めない", async () => {
   expect(count("PATCH")).toBe(1);
 });
 
-it("画像は30件まで、sha256 と imageId が同じなら取り直さない", async () => {
+it("R-SYNC-08 R-SYNC-10: 画像は30件まで、sha256 と imageId が同じなら取り直さない", async () => {
   const items = [...Array(40).keys()].map((i) => dto(`r${i}`, { thumbnail: thumb() }));
   items.push(dto("same", { thumbnail: thumb() }));
   store().serverCache = cache([], { images: { same: { imageId: "img1", sha256: SHA, dataUrl: "data:x" } } });
@@ -167,7 +167,7 @@ it("画像は30件まで、sha256 と imageId が同じなら取り直さない"
   expect(imgs.same.dataUrl).toBe("data:x");
 });
 
-it("画像を取得して data URL で保存する。S3 には Authorization を付けず redirect: error", async () => {
+it("R-SYNC-13 R-SYNC-15 R-API-16: 画像を取得して data URL で保存する。S3 には Authorization を付けず redirect: error", async () => {
   const fetch = s3();
   vi.stubGlobal("fetch", fetch);
   script({ LIST: [page([dto("r1", { thumbnail: thumb() })])], THUMB: thumbUrl() });
@@ -187,14 +187,14 @@ it.each([
   ["status 200 以外", thumbUrl(), s3(203), thumb()],
   ["bytes 違い", thumbUrl(), s3(), thumb({ bytes: 4 })],
   ["hash 違い", thumbUrl(), s3(), thumb({ sha256: "0".repeat(64) })],
-])("画像の照合: %s なら保存しない", async (_, THUMB, fetch, t) => {
+])("R-SYNC-10 R-SYNC-11 R-SYNC-12 R-SYNC-13 R-SYNC-14: 画像の照合: %s なら保存しない", async (_, THUMB, fetch, t) => {
   vi.stubGlobal("fetch", fetch);
   script({ LIST: [page([dto("r1", { thumbnail: t })])], THUMB });
   expect((await s.listReminders(g.currentGen(), true)).ok).toBe(true);
   expect(stored().images).toEqual({});
 });
 
-it("DTO の thumbnail が null、または DTO に無い id の画像を消す", async () => {
+it("R-SYNC-09: DTO の thumbnail が null、または DTO に無い id の画像を消す", async () => {
   const img = { imageId: "img1", sha256: SHA, dataUrl: "data:x" };
   store().serverCache = cache([], { images: { r1: img, gone: img, r2: img } });
   script({ LIST: [page([dto("r1"), dto("r2", { thumbnail: thumb() })])] });
@@ -202,14 +202,14 @@ it("DTO の thumbnail が null、または DTO に無い id の画像を消す",
   expect(stored().images).toEqual({ r2: img });
 });
 
-it("notified から hidden:true と DTO に無い id を消す", async () => {
+it("R-SYNC-16: notified から hidden:true と DTO に無い id を消す", async () => {
   Object.assign(store(), { "notified:r1": 1, "notified:gone": 1, "notified:r2": 1 });
   script({ LIST: [page([dto("r1", { hidden: true }), dto("r2")])] });
   await s.listReminders(g.currentGen(), true);
   expect(await c.getNotifiedIds()).toEqual(new Set(["r2"]));
 });
 
-it.each([true, false])("同期中の作成が全件置き換えで消えない（応答に含む: %s）", async (included) => {
+it.each([true, false])("R-GEN-04 R-SYNC-04: 同期中の作成が全件置き換えで消えない（応答に含む: %s）", async (included) => {
   const d = deferred<unknown>();
   script({ LIST: [() => d.promise], POST: [ok(dto("new"), '"e"', 201)] });
   const gen = g.currentGen();
@@ -226,7 +226,7 @@ it.each([true, false])("同期中の作成が全件置き換えで消えない�
   expect(stored().items.map((i) => i.id)).toContain("a");
 });
 
-it("同期中の config/save が完了する", async () => {
+it("R-GEN-03: 同期中の config/save が完了する", async () => {
   const d = deferred<unknown>();
   // 実際の listPage と同じく、page ごとに authLock の中で token を取る
   const token = () => a.authLock(async () => {});
@@ -240,7 +240,7 @@ it("同期中の config/save が完了する", async () => {
   await expect(sync).resolves.toMatchObject({ ok: true });
 });
 
-it("失敗した時は cache の変換と code を返す", async () => {
+it("R-SYNC-19 R-SYNC-18: 失敗した時は cache の変換と code を返す", async () => {
   store().serverCache = cache([dto("a")]);
   script({ LIST: [{ ok: false, code: "SERVICE_UNAVAILABLE", status: 503 }] });
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -250,7 +250,7 @@ it("失敗した時は cache の変換と code を返す", async () => {
   expect(stored().syncedAt).toBe(0);
 });
 
-it("同期の後に server の alarm を作り直す", async () => {
+it("R-SYNC-17: 同期の後に server の alarm を作り直す", async () => {
   script({ LIST: [page([dto("a"), dto("h", { hidden: true })])] });
   await s.listReminders(g.currentGen(), true);
   expect(ch().alarms.clearAll).toHaveBeenCalled();

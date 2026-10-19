@@ -26,7 +26,7 @@ beforeEach(async () => {
   NO = await import("@/utils/nodataUtils");
 });
 
-it("toReminders: thumbnail は imageId と sha256 が一致する時だけ、notified は hidden", () => {
+it("R-DTO-01 R-DTO-02: toReminders: thumbnail は imageId と sha256 が一致する時だけ、notified は hidden", () => {
   const th = { imageId: "i", mime: "image/png", bytes: 1, sha256: "s" };
   const r = c.toReminders(
     cache([dto("a", { thumbnail: th }), dto("b", { thumbnail: { ...th, sha256: "z" } }), dto("n")], {
@@ -39,14 +39,14 @@ it("toReminders: thumbnail は imageId と sha256 が一致する時だけ、not
   expect(r.map((x) => x.hidden)).toEqual([false, false, true]);
 });
 
-it("notified の同時の記録がどちらも残る", async () => {
+it("R-STO-08: notified の同時の記録がどちらも残る", async () => {
   await Promise.all([c.markNotified("a"), c.markNotified("b")]);
   expect(await c.getNotifiedIds()).toEqual(new Set(["a", "b"]));
   await c.removeNotified(["a"]);
   expect(await c.getNotifiedIds()).toEqual(new Set(["b"]));
 });
 
-it("readCache: configKey が違う cache は空になり消える", async () => {
+it("R-STO-10 R-CFG-07: readCache: configKey が違う cache は空になり消える", async () => {
   store().serverCache = { ...cache([dto("a")]), configKey: "old" };
   const r = await c.readCache();
   expect(r.items).toEqual([]);
@@ -54,7 +54,7 @@ it("readCache: configKey が違う cache は空になり消える", async () => 
   expect("serverCache" in store()).toBe(false);
 });
 
-it("writeCache と clearServerCache は古い世代では何もしない", async () => {
+it("R-GEN-02: writeCache と clearServerCache は古い世代では何もしない", async () => {
   const old = g.currentGen();
   g.bumpGen();
   expect(await c.writeCache(old, cache([dto("a")]))).toBe(false);
@@ -68,7 +68,7 @@ it("writeCache と clearServerCache は古い世代では何もしない", async
   expect("serverCache" in store()).toBe(false);
 });
 
-it("upsertItem は同じ id を1件にし、removeItem は画像も消す", () => {
+it("R-CRUD-05 R-CRUD-06: upsertItem は同じ id を1件にし、removeItem は画像も消す", () => {
   const img = { imageId: "i", sha256: "s", dataUrl: "d" };
   let x = c.upsertItem(cache(), dto("a"), img);
   x = c.upsertItem(x, dto("a", { title: "new" }));
@@ -80,7 +80,7 @@ it("upsertItem は同じ id を1件にし、removeItem は画像も消す", () =
   expect(x.images).toEqual({});
 });
 
-it("rebuildAlarms: server は未来・非表示でない・未通知の1件だけ", async () => {
+it("R-SYNC-17: rebuildAlarms: server は未来・非表示でない・未通知の1件だけ", async () => {
   store().serverCache = cache([
     dto("future"),
     dto("past", { reminderTime: "2000-01-01 00:00:00" }),
@@ -93,7 +93,7 @@ it("rebuildAlarms: server は未来・非表示でない・未通知の1件だ�
   expect(ch().alarms.create.mock.calls[0][0]).toBe("future");
 });
 
-it("rebuildAlarms: local は reminders から作る", async () => {
+it("R-CRUD-08 R-SCOPE-08 R-STO-06: rebuildAlarms: local は reminders から作る", async () => {
   store().settings = { connectionType: "local" };
   store().reminders = [
     { id: "l", reminderTime: "2099-01-01 00:00:00", hidden: false },
@@ -103,7 +103,7 @@ it("rebuildAlarms: local は reminders から作る", async () => {
   expect(ch().alarms.create.mock.calls.map((x: unknown[]) => x[0])).toEqual(["l"]);
 });
 
-it("rebuildAlarms と clearServerAlarms: 古い世代は clearAll しない", async () => {
+it("R-GEN-02 R-SYNC-17: rebuildAlarms と clearServerAlarms: 古い世代は clearAll しない", async () => {
   const old = g.currentGen();
   g.bumpGen();
   await a.rebuildAlarms(old);

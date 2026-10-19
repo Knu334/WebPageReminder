@@ -68,7 +68,7 @@ beforeEach(async () => {
 
 // 作成
 
-it("201 で成功し cache に入る", async () => {
+it("R-WRITE-01 R-CRUD-05 R-CRUD-01 R-CRUD-02 R-MSG-13 R-STO-07: 201 で成功し cache に入る", async () => {
   store().serverCache = cache([dto("r1", { title: "old" })]);
   script({ POST: [ok(dto("r1", { thumbnail: thumb }), '"e"', 201)] });
   const r = await s.createOnServer(g.currentGen(), rem());
@@ -83,7 +83,7 @@ it("201 で成功し cache に入る", async () => {
   expect(ch().alarms.create).toHaveBeenCalledWith("r1", { when: Date.parse(FUTURE) });
 });
 
-it("NO_DATA の thumbnail は null で送り、画像は cache に入れない", async () => {
+it("R-CRUD-03: NO_DATA の thumbnail は null で送り、画像は cache に入れない", async () => {
   script({ POST: [ok(dto("r1"), '"e"', 201)] });
   const r = await s.createOnServer(g.currentGen(), rem({ thumbnail: NO.NO_DATA.thumbnail }));
   expect((h.calls[0].args[0] as { thumbnail: unknown }).thumbnail).toBeNull();
@@ -91,28 +91,28 @@ it("NO_DATA の thumbnail は null で送り、画像は cache に入れない",
   expect(stored().images).toEqual({});
 });
 
-it("UNKNOWN_RESULT → GET 200 で成功", async () => {
+it("R-WRITE-02: UNKNOWN_RESULT → GET 200 で成功", async () => {
   script({ POST: [UNKNOWN], GET: [ok(dto("r1"))] });
   expect((await s.createOnServer(g.currentGen(), rem())).ok).toBe(true);
   expect(count("POST")).toBe(1);
   expect(stored().items.map((i) => i.id)).toEqual(["r1"]);
 });
 
-it("UNKNOWN_RESULT → GET 404 → POST 1回だけ再送", async () => {
+it("R-WRITE-02: UNKNOWN_RESULT → GET 404 → POST 1回だけ再送", async () => {
   script({ POST: [UNKNOWN, UNKNOWN], GET: [fail(404, "REMINDER_NOT_FOUND")] });
   expect(await s.createOnServer(g.currentGen(), rem())).toMatchObject({ ok: false, code: "UNKNOWN_RESULT" });
   expect(count("POST")).toBe(2);
   expect(count("GET")).toBe(1);
 });
 
-it("409 → GET 404 で ALREADY_EXISTS", async () => {
+it("R-WRITE-03: 409 → GET 404 で ALREADY_EXISTS", async () => {
   script({ POST: [fail(409, "ALREADY_EXISTS")], GET: [fail(404, "REMINDER_NOT_FOUND")] });
   expect(await s.createOnServer(g.currentGen(), rem())).toMatchObject({ ok: false, code: "ALREADY_EXISTS" });
   expect(count("POST")).toBe(1);
   expect(store().serverCache).toBeUndefined();
 });
 
-it("409 → GET 200 で成功", async () => {
+it("R-WRITE-03: 409 → GET 200 で成功", async () => {
   script({ POST: [fail(409, "ALREADY_EXISTS")], GET: [ok(dto("r1"))] });
   expect((await s.createOnServer(g.currentGen(), rem())).ok).toBe(true);
   expect(stored().items.map((i) => i.id)).toEqual(["r1"]);
@@ -120,19 +120,19 @@ it("409 → GET 200 で成功", async () => {
 
 // 非表示
 
-it("最新が未来の時刻なら PATCH しない", async () => {
+it("R-WRITE-05: 最新が未来の時刻なら PATCH しない", async () => {
   script({ GET: [ok(dto("r1"))] });
   expect(await s.hideOnServer(g.currentGen(), "r1")).toEqual({ ok: true });
   expect(count("PATCH")).toBe(0);
 });
 
-it("すでに hidden かつ thumbnail null なら PATCH しない", async () => {
+it("R-WRITE-05: すでに hidden かつ thumbnail null なら PATCH しない", async () => {
   script({ GET: [ok(dto("r1", { reminderTime: PAST, hidden: true }))] });
   expect(await s.hideOnServer(g.currentGen(), "r1")).toEqual({ ok: true });
   expect(count("PATCH")).toBe(0);
 });
 
-it("412 で GET からやり直す（1回）", async () => {
+it("R-WRITE-04 R-WRITE-06 R-WRITE-12: 412 で GET からやり直す（1回）", async () => {
   store().serverCache = cache([dto("r1", { reminderTime: PAST })]);
   const done = dto("r1", { reminderTime: PAST, hidden: true, revision: 3 });
   script({
@@ -147,21 +147,21 @@ it("412 で GET からやり直す（1回）", async () => {
   expect(stored().items).toEqual([done]);
 });
 
-it("412 が2回なら失敗を返す", async () => {
+it("R-WRITE-06: 412 が2回なら失敗を返す", async () => {
   const d = ok(dto("r1", { reminderTime: PAST }));
   script({ GET: [d, d], PATCH: [fail(412, "PRECONDITION_FAILED"), fail(412, "PRECONDITION_FAILED")] });
   expect(await s.hideOnServer(g.currentGen(), "r1")).toMatchObject({ ok: false, code: "PRECONDITION_FAILED" });
   expect(count("PATCH")).toBe(2);
 });
 
-it("404 で cache から外す", async () => {
+it("R-WRITE-06: 404 で cache から外す", async () => {
   store().serverCache = cache([dto("r1", { reminderTime: PAST }), dto("r2")]);
   script({ GET: [ok(dto("r1", { reminderTime: PAST }))], PATCH: [fail(404, "REMINDER_NOT_FOUND")] });
   expect(await s.hideOnServer(g.currentGen(), "r1")).toEqual({ ok: true });
   expect(stored().items.map((i) => i.id)).toEqual(["r2"]);
 });
 
-it("UNKNOWN_RESULT → GET で両方の条件を満たせば成功", async () => {
+it("R-WRITE-07: UNKNOWN_RESULT → GET で両方の条件を満たせば成功", async () => {
   script({
     GET: [ok(dto("r1", { reminderTime: PAST, thumbnail: thumb })), ok(dto("r1", { reminderTime: PAST, hidden: true }))],
     PATCH: [UNKNOWN],
@@ -170,7 +170,7 @@ it("UNKNOWN_RESULT → GET で両方の条件を満たせば成功", async () =>
   expect(stored().items[0].hidden).toBe(true);
 });
 
-it("UNKNOWN_RESULT → GET で条件を満たさなければ UNKNOWN_RESULT", async () => {
+it("R-WRITE-07: UNKNOWN_RESULT → GET で条件を満たさなければ UNKNOWN_RESULT", async () => {
   const d = ok(dto("r1", { reminderTime: PAST, hidden: true, thumbnail: thumb }));
   script({ GET: [d, d], PATCH: [UNKNOWN] });
   expect(await s.hideOnServer(g.currentGen(), "r1")).toMatchObject({ ok: false, code: "UNKNOWN_RESULT" });
@@ -178,7 +178,7 @@ it("UNKNOWN_RESULT → GET で条件を満たさなければ UNKNOWN_RESULT", as
 
 // 削除
 
-it("user の 412 は cache を最新にして CONFLICT、DELETE は1回", async () => {
+it("R-WRITE-09: user の 412 は cache を最新にして CONFLICT、DELETE は1回", async () => {
   store().serverCache = cache([dto("r1")]);
   const latest = dto("r1", { title: "new", revision: 2 });
   script({ GET: [ok(dto("r1")), ok(latest)], DELETE: [fail(412, "PRECONDITION_FAILED")] });
@@ -187,7 +187,7 @@ it("user の 412 は cache を最新にして CONFLICT、DELETE は1回", async 
   expect(stored().items).toEqual([latest]);
 });
 
-it("user の削除の成功で cache から外し alarm を消す", async () => {
+it("R-WRITE-08 R-WRITE-11 R-CRUD-06: user の削除の成功で cache から外し alarm を消す", async () => {
   store().serverCache = cache([dto("r1"), dto("r2")]);
   await ch().alarms.create("r1", { when: Date.parse(FUTURE) });
   script({ GET: [ok(dto("r1"))], DELETE: [ok({ id: "r1", deleted: true, revision: 2 }, null)] });
@@ -197,7 +197,7 @@ it("user の削除の成功で cache から外し alarm を消す", async () => 
   expect((await ch().alarms.getAll()).map((a) => a.name)).toEqual(["r2"]);
 });
 
-it("cleanup の 412 は GET からやり直す", async () => {
+it("R-WRITE-10: cleanup の 412 は GET からやり直す", async () => {
   const d = ok(dto("r1", { reminderTime: OLD }));
   script({ GET: [d, d], DELETE: [fail(412, "PRECONDITION_FAILED"), ok({ id: "r1", deleted: true, revision: 3 }, null)] });
   const r = await s.deleteInQueue(g.currentGen(), await s.apiFor(g.currentGen()), cache([dto("r1", { reminderTime: OLD })]), "r1");
@@ -207,7 +207,7 @@ it("cleanup の 412 は GET からやり直す", async () => {
   expect(store().serverCache).toBeUndefined(); // InQueue は書かない
 });
 
-it("cleanup で最新が1か月以内なら DELETE しない", async () => {
+it("R-WRITE-08: cleanup で最新が1か月以内なら DELETE しない", async () => {
   script({ GET: [ok(dto("r1", { reminderTime: PAST }))] });
   const r = await s.deleteInQueue(g.currentGen(), await s.apiFor(g.currentGen()), cache([dto("r1", { reminderTime: OLD })]), "r1");
   expect(r.result).toEqual({ ok: true });
@@ -215,7 +215,7 @@ it("cleanup で最新が1か月以内なら DELETE しない", async () => {
   expect(r.cache.items[0].reminderTime).toBe(PAST);
 });
 
-it("404 と UNKNOWN_RESULT → GET 404 は成功", async () => {
+it("R-WRITE-08: 404 と UNKNOWN_RESULT → GET 404 は成功", async () => {
   store().serverCache = cache([dto("r1"), dto("r2")]);
   script({ GET: [ok(dto("r1")), fail(404, "REMINDER_NOT_FOUND")], DELETE: [UNKNOWN] });
   expect(await s.deleteOnServer(g.currentGen(), "r1")).toEqual({ ok: true });
@@ -226,7 +226,7 @@ it("404 と UNKNOWN_RESULT → GET 404 は成功", async () => {
 
 // 再入
 
-it("queue の中から hideInQueue・deleteInQueue を呼んでも完了する", async () => {
+it("R-GEN-04: queue の中から hideInQueue・deleteInQueue を呼んでも完了する", async () => {
   const gen = g.currentGen();
   const api = await s.apiFor(gen);
   script({ GET: [ok(dto("r1")), ok(dto("r2", { reminderTime: OLD }))], DELETE: [ok({ id: "r2", deleted: true, revision: 2 }, null)] });
@@ -241,7 +241,7 @@ it("queue の中から hideInQueue・deleteInQueue を呼んでも完了する",
 
 // 世代
 
-it("受け付けた後に bumpGen されたら API を送らず STALE", async () => {
+it("R-GEN-02: 受け付けた後に bumpGen されたら API を送らず STALE", async () => {
   const gen = g.currentGen();
   g.bumpGen();
   expect(await s.createOnServer(gen, rem())).toEqual({ ok: false, code: "STALE" });
@@ -250,7 +250,7 @@ it("受け付けた後に bumpGen されたら API を送らず STALE", async ()
   expect(h.calls).toEqual([]);
 });
 
-it("API の成功後に bumpGen されたら cache に書かず STALE", async () => {
+it("R-GEN-02: API の成功後に bumpGen されたら cache に書かず STALE", async () => {
   const gen = g.currentGen();
   script({ POST: [ok(dto("r1"), '"e"', 201)] }); // fake は世代を見ないので POST は成功する
   const p = s.createOnServer(gen, rem());

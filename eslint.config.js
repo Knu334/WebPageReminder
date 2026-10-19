@@ -25,4 +25,9 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    extends: [js.configs.recommended],
+    files: ['scripts/**/*.mjs'],
+    languageOptions: { globals: globals.node },
+  },
 )

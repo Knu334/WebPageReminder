@@ -72,7 +72,7 @@ beforeEach(async () => {
   m = await import("@/background/messages");
 });
 
-describe("isTrustedSender", () => {
+describe("R-MSG-10: isTrustedSender", () => {
   it("自拡張の page だけを受け付ける", () => {
     expect(m.isTrustedSender({ id: "test-ext-id", url: "chrome-extension://test-ext-id/popup.html" })).toBe(true);
     expect(m.isTrustedSender({ id: "other", url: "chrome-extension://other/popup.html" })).toBe(false);
@@ -81,7 +81,7 @@ describe("isTrustedSender", () => {
   });
 });
 
-describe("isValidId", () => {
+describe("R-MSG-11: isValidId", () => {
   it.each([[""], ["a".repeat(129)], ["a\u0000"], ["a\u0085"], ["\ud800"], [1]])("%j は不可", (id) => {
     expect(m.isValidId(id)).toBe(false);
   });
@@ -90,7 +90,7 @@ describe("isValidId", () => {
   });
 });
 
-describe("parseMessage", () => {
+describe("R-MSG-11: parseMessage", () => {
   it("未知の type は unknown", () => {
     expect(m.parseMessage({ type: "x" })).toEqual({ kind: "unknown" });
     expect(m.parseMessage(null)).toEqual({ kind: "unknown" });
@@ -109,14 +109,14 @@ describe("parseMessage", () => {
     const r = reminder({ url: "https://e.test/" + "a".repeat(4096 - 15), title: "a".repeat(1024) });
     expect(m.parseMessage({ type: "reminders/create", reminder: r })).toMatchObject({ kind: "ok" });
   });
-  it("config/save の不正な URL は invalid、正しければ正規化する", () => {
+  it("R-MSG-04 R-CFG-02: config/save の不正な URL は invalid、正しければ正規化する", () => {
     expect(m.parseMessage({ type: "config/save", config: { ...CFG, apiBaseUrl: "http://api.test" } })).toEqual({ kind: "invalid" });
     expect(m.parseMessage({ type: "config/save", config: null })).toEqual({ kind: "invalid" });
     expect(m.parseMessage({ type: "config/save", config: { ...CFG, apiBaseUrl: "https://API.test/" } })).toEqual({
       kind: "ok", msg: { type: "config/save", config: CFG },
     });
   });
-  it("その他の入力の検証", () => {
+  it("R-MSG-09: その他の入力の検証", () => {
     expect(m.parseMessage({ type: "mode/change", connectionType: "x" })).toEqual({ kind: "invalid" });
     expect(m.parseMessage({ type: "reminders/list", fresh: "1" })).toEqual({ kind: "invalid" });
     expect(m.parseMessage({ type: "reminders/delete", id: "" })).toEqual({ kind: "invalid" });
@@ -124,14 +124,14 @@ describe("parseMessage", () => {
   });
 });
 
-it("local モードの reminders/list は NOT_SERVER_MODE", async () => {
+it("R-MSG-07 R-MSG-11 R-MSG-09: local モードの reminders/list は NOT_SERVER_MODE", async () => {
   local().settings = { connectionType: "local" };
   expect(await handle({ type: "reminders/list", fresh: true })).toMatchObject({ ok: false, code: "NOT_SERVER_MODE" });
   expect(await handle({ type: "reminders/delete", id: "a" })).toEqual({ ok: false, code: "NOT_SERVER_MODE" });
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-it("config/save で接続先が変わると認証と cache と alarm が消え、世代が進む", async () => {
+it("R-MSG-04 R-CFG-04 R-GEN-01: config/save で接続先が変わると認証と cache と alarm が消え、世代が進む", async () => {
   loggedIn();
   local().serverCache = cache([dto("a")]);
   await ch().alarms.create("a", { when: Date.parse(FUTURE) });
@@ -145,7 +145,7 @@ it("config/save で接続先が変わると認証と cache と alarm が消え�
   expect(await alarmNames()).toEqual([]);
 });
 
-it("config/save は4項目だけを保存し、他の field で settings を書き換えない", async () => {
+it("R-MSG-04 R-CFG-04: config/save は4項目だけを保存し、他の field で settings を書き換えない", async () => {
   local().settings = { autoOpen: true, webPush: false, connectionType: "server", ...CFG };
   const config = { ...CFG2, connectionType: "local", autoOpen: false, foo: 1 };
   const parsed = m.parseMessage({ type: "config/save", config });
@@ -155,7 +155,7 @@ it("config/save は4項目だけを保存し、他の field で settings を書�
   expect(local().settings).toEqual({ autoOpen: true, webPush: false, connectionType: "server", ...CFG2 });
 });
 
-it("config/save で接続先が変わらなければ消さない", async () => {
+it("R-MSG-04 R-CFG-04: config/save で接続先が変わらなければ消さない", async () => {
   loggedIn();
   local().serverCache = cache([dto("a")]);
   await ch().alarms.create("a", { when: Date.parse(FUTURE) });
@@ -167,7 +167,7 @@ it("config/save で接続先が変わらなければ消さない", async () => {
   expect(await alarmNames()).toEqual(["a"]);
 });
 
-it("login の成功で古い cache を消して同期を始める", async () => {
+it("R-MSG-02 R-LOGIN-12: login の成功で古い cache を消して同期を始める", async () => {
   local().serverCache = cache([dto("old")]);
   routes["/v2/reminders?limit=50"] = () => json({ items: [dto("n")], nextCursor: null });
   expect(await handle({ type: "auth/login" })).toEqual({ ok: true });
@@ -175,7 +175,7 @@ it("login の成功で古い cache を消して同期を始める", async () => 
   await vi.waitFor(async () => expect(await alarmNames()).toEqual(["n"]));
 });
 
-it("logout の revoke 中に成功した新しい login の cache と alarm を、logout の後処理が消さない", async () => {
+it("R-MSG-03 R-LOGOUT-03 R-GEN-02 R-LOGOUT-06: logout の revoke 中に成功した新しい login の cache と alarm を、logout の後処理が消さない", async () => {
   loggedIn();
   local().serverCache = cache([dto("old")]);
   const revoke = deferred<Response>();
@@ -193,7 +193,7 @@ it("logout の revoke 中に成功した新しい login の cache と alarm を�
   expect(session().authNotice).toBeUndefined();
 });
 
-it("login の後処理の前に logout が来たら、login の後処理は何もしない", async () => {
+it("R-LOGIN-10 R-GEN-02: login の後処理の前に logout が来たら、login の後処理は何もしない", async () => {
   local().serverCache = cache([dto("old")]);
   const start = g.currentGen();
   const block = deferred<void>();
@@ -212,7 +212,7 @@ it("login の後処理の前に logout が来たら、login の後処理は何�
   expect(ch().storage.local.remove.mock.calls.filter(([k]) => k === "serverCache").length).toBe(1);
 });
 
-it("受け付けた後に config/save が来た作成は STALE で API を送らない", async () => {
+it("R-MSG-08 R-GEN-02: 受け付けた後に config/save が来た作成は STALE で API を送らない", async () => {
   loggedIn();
   const d = deferred<void>();
   const settings = { ...(local().settings as object) };
@@ -224,7 +224,7 @@ it("受け付けた後に config/save が来た作成は STALE で API を送ら
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
-it.each(["local", "server"])("alarms/reset の受付の後に mode/change が来たら何もしない（→ %s）", async (to) => {
+it.each(["local", "server"])("R-MSG-06 R-GEN-02 R-CRUD-08: alarms/reset の受付の後に mode/change が来たら何もしない（→ %s）", async (to) => {
   local().reminders = [reminder({ id: "l1" })];
   local().serverCache = cache([dto("s1")]);
   const d = deferred<void>();
@@ -238,14 +238,14 @@ it.each(["local", "server"])("alarms/reset の受付の後に mode/change が来
   expect(await alarmNames()).toEqual([to === "local" ? "l1" : "s1"]);
 });
 
-it("alarms/reset は今のモードの一覧から alarm を作り直す", async () => {
+it("R-MSG-06 R-SCOPE-08 R-CRUD-08: alarms/reset は今のモードの一覧から alarm を作り直す", async () => {
   local().settings = { connectionType: "local" };
   local().reminders = [reminder({ id: "l1" }), reminder({ id: "l2", hidden: true })];
   expect(await handle({ type: "alarms/reset" })).toEqual({ ok: true });
   expect(await alarmNames()).toEqual(["l1"]);
 });
 
-it("mode/change の後に古いモードの alarm が残らない", async () => {
+it("R-MSG-05 R-CFG-09: mode/change の後に古いモードの alarm が残らない", async () => {
   local().serverCache = cache([dto("s1")]);
   local().reminders = [reminder({ id: "l1" })];
   await ch().alarms.create("s1", { when: Date.parse(FUTURE) });
@@ -258,7 +258,7 @@ it("mode/change の後に古いモードの alarm が残らない", async () => 
   expect(await alarmNames()).toEqual(["s1"]);
 });
 
-it("進行中の server の同期が、切り替えた後の local の alarm を上書きしない", async () => {
+it("R-GEN-04 R-CFG-09: 進行中の server の同期が、切り替えた後の local の alarm を上書きしない", async () => {
   loggedIn();
   local().reminders = [reminder({ id: "l1" })];
   const list = deferred<Response>();
@@ -272,7 +272,7 @@ it("進行中の server の同期が、切り替えた後の local の alarm を
   expect(await alarmNames()).toEqual(["l1"]);
 });
 
-it("login の window を開いている間の auth/status は loginInProgress: true、取り消し後は notice: LOGIN_CANCELLED", async () => {
+it("R-MSG-01 R-STATUS-01 R-LOGIN-03: login の window を開いている間の auth/status は loginInProgress: true、取り消し後は notice: LOGIN_CANCELLED", async () => {
   const win = deferred<string>();
   flow().mockImplementation(() => win.promise);
   const li = handle({ type: "auth/login" });
@@ -283,7 +283,7 @@ it("login の window を開いている間の auth/status は loginInProgress: t
   expect(await handle({ type: "auth/status" })).toMatchObject({ loginInProgress: false, notice: "LOGIN_CANCELLED" });
 });
 
-it("想定外の例外は reject せず INTERNAL を返す", async () => {
+it("R-LOG-01: 想定外の例外は reject せず INTERNAL を返す", async () => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   ch().storage.session.get.mockRejectedValueOnce(new Error("boom"));
   expect(await handle({ type: "auth/status" })).toEqual({ ok: false, code: "INTERNAL" });

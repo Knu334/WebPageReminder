@@ -1,7 +1,7 @@
 import { it, expect } from "vitest";
 import { createSerial } from "@/background/serial";
 
-it("runs serially and survives rejection", async () => {
+it("R-GEN-03 R-GEN-04: runs serially and survives rejection", async () => {
   const serial = createSerial();
   const log: string[] = [];
   const a = serial(async () => {

@@ -16,6 +16,8 @@ const FIELDS: { key: keyof ServerConfig; label: string }[] = [
 const NOTICE: Partial<Record<string, string>> = {
   REVOKE_FAILED: "ログアウトしたが、server 側の失効は未完了（通信障害）",
   LOGOUT_PAGE_FAILED: "Cognito のログインの記録が残っている可能性がある",
+  LOGIN_FAILED: "ログインに失敗しました",
+  LOGIN_CANCELLED: "ログインを取り消しました",
 };
 
 const stateText = (s: AuthStatus): string =>

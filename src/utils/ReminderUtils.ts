@@ -42,6 +42,14 @@ export class ReminderUtils {
   };
 }
 
+// 前月の同じ日時。同じ日が無ければ前月の末日
+export const oneMonthBefore = (now: Date): Date => {
+  const d = new Date(now);
+  d.setMonth(d.getMonth() - 1);
+  if (d.getDate() !== now.getDate()) d.setDate(0);
+  return d;
+};
+
 export const removeOldReminders = (reminders: Reminder[]): Reminder[] => {
   const baseTime = new Date();
 
@@ -54,16 +62,8 @@ export const removeOldReminders = (reminders: Reminder[]): Reminder[] => {
   }
 
   // 非表示にしたリマインダーのパージ
-  if (baseTime.getMonth() - 1 < 0) {
-    baseTime.setFullYear(baseTime.getFullYear() - 1);
-    baseTime.setMonth(11);
-  } else {
-    baseTime.setMonth(baseTime.getMonth() - 1);
-  }
-
-  reminders = reminders.filter((r) => {
-    return new Date(r.reminderTime).getTime() > baseTime.getTime();
-  });
+  const limit = oneMonthBefore(baseTime).getTime();
+  reminders = reminders.filter((r) => new Date(r.reminderTime).getTime() >= limit);
 
   return reminders;
 };

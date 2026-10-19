@@ -1,8 +1,9 @@
 import { createApi, type CreateBody } from "./api";
 import { getAccessToken } from "./auth";
-import { getNotifiedIds, queue, readCache, removeItem, toReminders, upsertItem, writeCache } from "./cache";
+import { getNotifiedIds, queue, readCache, removeItem, removeNotified, toReminders, upsertItem, writeCache } from "./cache";
 import { rebuildAlarms } from "./alarms";
-import { isCurrent } from "./gen";
+import { isCurrent, signalFor } from "./gen";
+import { sha256Hex } from "./pkce";
 import { loadSettings } from "@/utils/config";
 import { oneMonthBefore } from "@/utils/ReminderUtils";
 import { NO_DATA } from "@/utils/nodataUtils";
@@ -152,4 +153,131 @@ export async function deleteInQueue(
   if (!isCurrent(gen)) return { result: STALE, cache };
   const o = await deleteFlow(api, id, true);
   return { result: o.result, cache: apply(cache, id, o.change) };
+}
+
+// 一覧の同期
+
+type ListResult = { ok: true; reminders: Reminder[] } | (Fail & { reminders: Reminder[] });
+const SYNC_INTERVAL = 60_000;
+const MAX_WRITES = 30;
+const MAX_IMAGES = 30;
+const inflight = new Map<number, Promise<ListResult>>();
+
+// 先頭 n 件だけの Fisher–Yates
+export const pickRandom = <T>(xs: T[], n: number, random = Math.random): T[] => {
+  const a = [...xs];
+  const k = Math.min(n, a.length);
+  for (let i = 0; i < k; i++) {
+    const j = i + Math.floor(random() * (a.length - i));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a.slice(0, k);
+};
+
+const fromCache = async (): Promise<Reminder[]> => toReminders(await readCache(), await getNotifiedIds());
+
+const failWith = async (f: Fail): Promise<ListResult> => {
+  if (f.code !== "STALE") console.error("sync failed", f.code, f.status);
+  return { ok: false, code: f.code, status: f.status, reminders: await fromCache() };
+};
+
+const toBase64 = (bytes: Uint8Array): string => {
+  let s = "";
+  // 1 MiB の画像で引数の上限を超えないよう分けて変換する
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+
+// どれかの照合が合わなければ null（次の同期で取り直す）。署名 URL は log に出さない
+async function fetchImage(gen: number, api: Api, imageHost: string, d: ReminderDto): Promise<Image | null> {
+  const t = d.thumbnail!;
+  const u = await api.getThumbnailUrl(d.id);
+  if (!u.ok) {
+    if (u.code !== "STALE") console.error("thumbnail-url failed", u.code, u.status);
+    return null;
+  }
+  if (u.data.imageId !== t.imageId) return null;
+  try {
+    if (new URL(u.data.url).origin !== imageHost) return null;
+    const res = await fetch(u.data.url, {
+      redirect: "error",
+      signal: AbortSignal.any([AbortSignal.timeout(10_000), signalFor(gen)]),
+    });
+    if (res.status !== 200) return null;
+    const buf = await res.arrayBuffer();
+    if (buf.byteLength !== t.bytes || (await sha256Hex(buf)) !== t.sha256) return null;
+    return { imageId: t.imageId, sha256: t.sha256, dataUrl: `data:${t.mime};base64,${toBase64(new Uint8Array(buf))}` };
+  } catch {
+    return null;
+  }
+}
+
+// queue の中で行う
+async function syncInQueue(gen: number): Promise<ListResult> {
+  if (!isCurrent(gen)) return failWith(STALE);
+  const settings = await loadSettings();
+  const api = await apiFor(gen);
+
+  // 1. 全 page を読んでから全件置き換える
+  const items: ReminderDto[] = [];
+  let cursor: string | null = null;
+  do {
+    const r = await api.listPage(cursor);
+    if (!r.ok) return failWith(r);
+    items.push(...r.data.items);
+    cursor = r.data.nextCursor;
+  } while (cursor);
+  let cache: ServerCache = { ...(await readCache()), items };
+
+  // 2. 期限切れの整理
+  const now = Date.now();
+  const monthAgo = oneMonthBefore(new Date(now)).getTime();
+  const isOld = (d: ReminderDto) => Date.parse(d.reminderTime) < monthAgo;
+  const expired = items.filter((d) => isOld(d) || (Date.parse(d.reminderTime) < now && !d.hidden));
+  for (const d of pickRandom(expired, MAX_WRITES)) {
+    const r = await (isOld(d) ? deleteInQueue : hideInQueue)(gen, api, cache, d.id);
+    cache = r.cache;
+    if (!r.result.ok) {
+      if (r.result.code === "STALE") return failWith(STALE);
+      console.error("cleanup failed", r.result.code, r.result.status);
+    }
+  }
+
+  // 3. 画像
+  const images = { ...cache.images };
+  const byId = new Map(cache.items.map((d) => [d.id, d]));
+  for (const id of Object.keys(images)) if (!byId.get(id)?.thumbnail) delete images[id];
+  const stale = cache.items.filter(
+    (d) => d.thumbnail && (images[d.id]?.imageId !== d.thumbnail.imageId || images[d.id]?.sha256 !== d.thumbnail.sha256),
+  );
+  for (const d of pickRandom(stale, MAX_IMAGES)) {
+    const img = await fetchImage(gen, api, settings.imageHost, d);
+    if (img) images[d.id] = img;
+  }
+
+  // 6. syncedAt（cache の書き込みは最後に1回。alarm は書いた cache から作るので先に書く）
+  cache = { ...cache, images, syncedAt: Date.now() };
+  if (!(await writeCache(gen, cache))) return failWith(STALE);
+
+  // 4. notifiedIds の整理
+  const notified = await getNotifiedIds();
+  await removeNotified([...notified].filter((id) => !byId.has(id) || byId.get(id)!.hidden));
+
+  // 5. server モードの時だけ alarm を作り直す（世代が違えば rebuildAlarms は何もしない）
+  if ((await loadSettings()).connectionType === "server") await rebuildAlarms(gen);
+  return { ok: true, reminders: toReminders(cache, await getNotifiedIds()) };
+}
+
+export function listReminders(gen: number, fresh: boolean): Promise<ListResult> {
+  if (!fresh) return fromCache().then((reminders) => ({ ok: true, reminders }));
+  let p = inflight.get(gen);
+  if (!p) {
+    p = (async (): Promise<ListResult> => {
+      const c = await readCache();
+      if (Date.now() - c.syncedAt < SYNC_INTERVAL) return { ok: true, reminders: toReminders(c, await getNotifiedIds()) };
+      return queue(() => syncInQueue(gen));
+    })().finally(() => inflight.delete(gen));
+    inflight.set(gen, p);
+  }
+  return p;
 }

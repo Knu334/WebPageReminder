@@ -2,10 +2,9 @@ import React, { useEffect, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { errorText, send } from "@/utils/bg";
+import { makeCall } from "@/utils/bg";
 import { normalizeConfig, originPatterns } from "@/utils/config";
-import type { Message } from "@/types/messages";
-import type { AuthStatus, Fail, ServerConfig, SettingsType } from "@/types/types";
+import type { AuthStatus, ServerConfig, SettingsType } from "@/types/types";
 
 const FIELDS: { key: keyof ServerConfig; label: string }[] = [
   { key: "apiBaseUrl", label: "API base URL" },
@@ -47,15 +46,18 @@ export const ServerSettings: React.FC<{
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof ServerConfig, string>>>({});
   const [status, setStatus] = useState<AuthStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 保存・ログイン・ログアウトの二重送信（2回の config/save と許可の dialog）を防ぐ
+  const [busy, setBusy] = useState(false);
 
-  const call = async <T,>(msg: Message): Promise<T | Fail> => {
-    const r = await send<T>(msg);
-    const f = r as Fail;
-    if (f.ok === false) {
-      if (f.code === "NETWORK") markDisconnected();
-      setError(errorText(f.code, f.status));
+  const call = makeCall(setError, markDisconnected);
+
+  const whileBusy = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    try {
+      await fn();
+    } finally {
+      setBusy(false);
     }
-    return r;
   };
 
   const loadStatus = async () => {
@@ -78,7 +80,7 @@ export const ServerSettings: React.FC<{
     await loadStatus();
   };
 
-  const handleSave = async () => {
+  const handleSave = () => whileBusy(async () => {
     setError(null);
     const n = normalizeConfig(input);
     if (!n.ok) {
@@ -92,14 +94,14 @@ export const ServerSettings: React.FC<{
     setInput(n.config);
     onSaved(n.config);
     await requestPermission(n.config);
-  };
+  });
 
-  const handleAuth = async (type: "auth/login" | "auth/logout") => {
+  const handleAuth = (type: "auth/login" | "auth/logout") => whileBusy(async () => {
     setError(null);
     await ensureFresh();
     await call<{ ok: true }>({ type });
     await loadStatus();
-  };
+  });
 
   const saved: ServerConfig = {
     apiBaseUrl: settings.apiBaseUrl,
@@ -122,7 +124,7 @@ export const ServerSettings: React.FC<{
           {fieldErrors[key] && <Label className="text-red-500">{fieldErrors[key]}</Label>}
         </div>
       ))}
-      <Button onClick={handleSave} className="w-full">
+      <Button onClick={handleSave} disabled={busy} className="w-full">
         保存
       </Button>
 
@@ -134,10 +136,10 @@ export const ServerSettings: React.FC<{
               <Button onClick={() => requestPermission(saved)}>許可する</Button>
             )}
             {ready && status.state === "LOGGED_IN" && (
-              <Button onClick={() => handleAuth("auth/logout")}>ログアウト</Button>
+              <Button onClick={() => handleAuth("auth/logout")} disabled={busy}>ログアウト</Button>
             )}
             {ready && status.state !== "LOGGED_IN" && !status.loginInProgress && (
-              <Button onClick={() => handleAuth("auth/login")}>ログイン</Button>
+              <Button onClick={() => handleAuth("auth/login")} disabled={busy}>ログイン</Button>
             )}
           </div>
           {status.notice && NOTICE[status.notice] && <Label className="block">{NOTICE[status.notice]}</Label>}

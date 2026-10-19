@@ -10,10 +10,9 @@ import {
 } from "@/utils/ReminderUtils";
 import { NO_DATA } from "./utils/nodataUtils";
 import { loadSettings } from "@/utils/config";
-import { errorText, send } from "@/utils/bg";
+import { makeCall } from "@/utils/bg";
 import { canvasHalve, shrinkToLimit } from "@/utils/image";
-import type { Message } from "@/types/messages";
-import { AuthStatus, ConnectionType, Fail, Reminder, ServerConfig, SettingsType } from "@/types/types";
+import { ConnectionType, Fail, Reminder, ServerConfig, SettingsType } from "@/types/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -31,29 +30,14 @@ function App() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [settings, setSettings] = useState<SettingsType>(DEFAULT_SETTINGS);
   const [error, setError] = useState<string | null>(null);
-  // Task 13 の ServerSettings に渡す
-  const [, setAuthStatus] = useState<AuthStatus | null>(null);
-  // 切断（NETWORK）の後、次の操作の前に一覧と状態を読み直す
+  // 切断（NETWORK）の後、次の操作の前に一覧を読み直す（認証の状態は ServerSettings が読む）
   const needsReload = useRef(false);
 
   const markDisconnected = () => {
     needsReload.current = true;
   };
 
-  const call = async <T,>(msg: Message): Promise<T | Fail> => {
-    const r = await send<T>(msg);
-    const f = r as Fail;
-    if (f.ok === false) {
-      if (f.code === "NETWORK") markDisconnected();
-      setError(errorText(f.code, f.status));
-    }
-    return r;
-  };
-
-  const loadAuthStatus = async () => {
-    const r = await call<AuthStatus>({ type: "auth/status" });
-    if (!("ok" in r)) setAuthStatus(r);
-  };
+  const call = makeCall(setError, markDisconnected);
 
   const showList = (r: ListRes | Fail) => {
     if ("reminders" in r) setReminders(withNoData(r.reminders));
@@ -76,7 +60,6 @@ function App() {
     if (!needsReload.current) return;
     needsReload.current = false;
     if (settings.connectionType === "server") showList(await call<ListRes>({ type: "reminders/list", fresh: true }));
-    await loadAuthStatus();
   };
 
   useEffect(() => {
@@ -119,14 +102,13 @@ function App() {
     })();
   }, []);
 
-  // 開いた時に一度だけ: 設定、一覧（server は cache → fresh の2段）、認証の状態を読む
+  // 開いた時に一度だけ: 設定と一覧（server は cache → fresh の2段）を読む
   useEffect(() => {
     (async () => {
       const s = await loadSettings();
       setSettings(s);
       if (s.connectionType === "server") await loadServerList();
       else await loadLocalList();
-      await loadAuthStatus();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -33,3 +33,16 @@ export const errorText = (code: string, status?: number): string | null => {
   if (status === 403) return `権限がありません（${code}）`;
   return `エラー（${code}）`;
 };
+
+// send して、失敗なら error を出す。NETWORK は切断として印を付ける（次の操作の前に読み直す）
+export const makeCall =
+  (setError: (t: string | null) => void, markDisconnected: () => void) =>
+  async <T>(msg: Message): Promise<T | Fail> => {
+    const r = await send<T>(msg);
+    const f = r as Fail;
+    if (f.ok === false) {
+      if (f.code === "NETWORK") markDisconnected();
+      setError(errorText(f.code, f.status));
+    }
+    return r;
+  };

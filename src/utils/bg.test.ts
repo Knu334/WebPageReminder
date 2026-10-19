@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { errorText, send } from "@/utils/bg";
+import { errorText, makeCall, send } from "@/utils/bg";
 
 const NET = "通信できません。時間をおいて再度お試しください";
 
@@ -31,5 +31,34 @@ describe("send", () => {
   it("maps a rejected sendMessage to NETWORK", async () => {
     vi.mocked(chrome.runtime.sendMessage).mockRejectedValue(new Error("Could not establish connection"));
     expect(await send({ type: "reminders/list" })).toEqual({ ok: false, code: "NETWORK" });
+  });
+});
+
+describe("makeCall", () => {
+  const setup = () => {
+    const setError = vi.fn();
+    const markDisconnected = vi.fn();
+    return { setError, markDisconnected, call: makeCall(setError, markDisconnected) };
+  };
+  it("NETWORK marks disconnected and sets the error", async () => {
+    vi.mocked(chrome.runtime.sendMessage).mockRejectedValue(new Error("gone"));
+    const { setError, markDisconnected, call } = setup();
+    expect(await call({ type: "auth/status" })).toEqual({ ok: false, code: "NETWORK" });
+    expect(markDisconnected).toHaveBeenCalledOnce();
+    expect(setError).toHaveBeenCalledWith(NET);
+  });
+  it("ok sets no error", async () => {
+    vi.mocked(chrome.runtime.sendMessage).mockResolvedValue({ ok: true } as never);
+    const { setError, markDisconnected, call } = setup();
+    expect(await call({ type: "alarms/reset" })).toEqual({ ok: true });
+    expect(setError).not.toHaveBeenCalled();
+    expect(markDisconnected).not.toHaveBeenCalled();
+  });
+  it("STALE sets no error text", async () => {
+    vi.mocked(chrome.runtime.sendMessage).mockResolvedValue({ ok: false, code: "STALE" } as never);
+    const { setError, markDisconnected, call } = setup();
+    await call({ type: "auth/login" });
+    expect(setError).toHaveBeenCalledWith(null);
+    expect(markDisconnected).not.toHaveBeenCalled();
   });
 });

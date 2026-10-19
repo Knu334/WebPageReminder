@@ -1,89 +1,57 @@
-# React + TypeScript + Vite
+# Web Page Reminder
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+開いている Web ページを、指定した時刻に通知・再表示する Chrome 拡張機能（Manifest V3）。
 
-Currently, two official plugins are available:
+「あとで読む」「この時間にもう一度見る」をブックマークより手軽に予約できる。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 機能
 
-## Expanding the ESLint configuration
+- popup を開くと、表示中のタブの URL・タイトル・スクリーンショットで reminder を作る
+- 指定した時刻にデスクトップ通知を出す。設定で、その時刻にページを自動で開くこともできる
+- 保存先を選べる
+  - **Local**: ブラウザの中（`chrome.storage.local`）だけに保存する
+  - **Server**: [reminder-server](https://github.com/Knu334/reminder-server) に保存し、複数の端末で共有する（Amazon Cognito でログインする）
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+## インストール
 
-- Configure the top-level `parserOptions` property like this:
+Chrome Web Store には公開していない。ソースから build して読み込む。
 
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+必要なもの: Node.js 22 以上、Google Chrome
+
+```sh
+npm ci
+npm run build
 ```
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+1. Chrome で `chrome://extensions` を開き、「デベロッパー モード」を有効にする
+2. 「パッケージ化されていない拡張機能を読み込む」で `dist/` を選ぶ
 
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
+> 2026-10 より前の版を使っていた場合は、先に旧版を削除する。extension ID が変わったため別の拡張機能として扱われ、旧版のデータは引き継がない。
 
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
-```
+## 使い方
 
-## server モード（reminder-server の v2 API、Cognito 認証）
+1. 予約したいページを開き、ツールバーの拡張機能のアイコンを押す
+2. 日時を選んで reminder を追加する
+3. 設定（Settings）で、ページの自動表示（Auto-open webpage）と通知（Web Push notifications）を切り替えられる
 
-保存先は設定画面で local（`chrome.storage.local`）か server を選ぶ。server モードは reminder-server の v2 API を Cognito の認証（Authorization Code + PKCE）で使う。AWS の実際の値はこの repository に書かない。
+### Server モード
 
-### 旧版の削除
+設定の Connection Type で Server を選び、reminder-server の運用者から受け取った4つの値（API base URL、Auth base URL、Client ID、Image host）を入れて保存する。接続先へのアクセスを許可し、「ログイン」を押す。
 
-manifest の `key` を固定したため extension ID が変わり、旧版とは別の拡張機能として扱われる。旧版の `chrome.storage.local`（local モードの reminder と設定）と alarm は引き継がない。通知が二重になるのを防ぐため、`chrome://extensions` で旧版を手で削除する。
+運用者に登録してもらう Callback URL と Logout URL は、同じ設定画面に表示される。
 
-### operator に渡す値
+## 開発
 
-extension ID は `fjaeafgipmkmgnkkpfddkfnbanhkgglh`。Cognito の app client に次を登録してもらう。
-
-| 値 | 内容 |
+| コマンド | 内容 |
 | --- | --- |
-| `chrome_origin` | `chrome-extension://fjaeafgipmkmgnkkpfddkfnbanhkgglh`（API の CORS の許可 origin） |
-| `callback_url` | `https://fjaeafgipmkmgnkkpfddkfnbanhkgglh.chromiumapp.org/cognito` |
-| `logout_url` | `https://fjaeafgipmkmgnkkpfddkfnbanhkgglh.chromiumapp.org/logout` |
+| `npm run build` | popup と service worker を `dist/` に出力する |
+| `npm test` | unit test（vitest） |
+| `npm run lint` | ESLint |
 
-### operator から受け取る値
+設計: [docs/superpowers/specs/2026-10-19-chrome-extension-v2-design.md](docs/superpowers/specs/2026-10-19-chrome-extension-v2-design.md)
 
-公開の設定で秘密ではない。username、password、token は設定に入れない。
+不具合や要望は [Issues](https://github.com/Knu334/WebPageReminder/issues) へ。
 
-| 値 | 形 |
-| --- | --- |
-| API base URL | `https://<api-id>.execute-api.<region>.amazonaws.com` |
-| Cognito の auth base URL | `https://<prefix>.auth.<region>.amazoncognito.com` |
-| Client ID | 小文字英数字 |
-| 画像の host | `https://<images-bucket>.s3.<region>.amazonaws.com` |
+## License
 
-scope は `openid reminder-api/read reminder-api/write` で固定。
-
-### 設定の手順
-
-1. `npm ci && npm run build` で `dist/` を作り、`chrome://extensions` の「パッケージ化されていない拡張機能を読み込む」で `dist/` を読み込む（旧版は先に削除する）。
-2. 拡張機能の設定画面で接続の種類に server を選ぶ。
-3. 受け取った API base URL、Auth base URL、Client ID、Image host を入れて保存する。
-4. 接続先へのアクセス許可を求められたら許可する。
-5. 「ログイン」を押し、Cognito のログイン画面で認証する。
+[MIT](LICENSE)

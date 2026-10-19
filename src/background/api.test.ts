@@ -2,7 +2,7 @@ import { it, expect, beforeEach, vi } from "vitest";
 
 let g: typeof import("@/background/gen");
 let mod: typeof import("@/background/api");
-const sleep = vi.fn(async (_ms: number) => {});
+const sleep = vi.fn<(ms: number) => Promise<void>>(async () => {});
 const getToken = vi.fn();
 const fetchMock = vi.fn();
 const res = (status: number, body: unknown = {}, headers: Record<string, string> = {}) =>

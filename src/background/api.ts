@@ -38,13 +38,15 @@ export function createApi(deps: ApiDeps) {
   ): Promise<ApiResult<T>> {
     const isGet = method === "GET";
     const netFail: Fail = { ok: false, code: isGet ? "NETWORK" : "UNKNOWN_RESULT" };
-    let forced = false;
+    let refreshed = false;
+    let forceNext = false;
     let retries429 = 0;
     let retriesNet = 0;
 
     for (;;) {
       if (!isCurrent(gen)) return STALE;
-      const t = await (forced ? getToken(gen, { force: true }) : getToken(gen));
+      const t = await (forceNext ? getToken(gen, { force: true }) : getToken(gen));
+      forceNext = false;
       if (!t.ok) return t;
       if (!isCurrent(gen)) return STALE;
 
@@ -53,6 +55,7 @@ export function createApi(deps: ApiDeps) {
       if (opts.ifMatch !== undefined) headers["If-Match"] = opts.ifMatch;
 
       let res: Response;
+      let text: string;
       try {
         res = await fetch(baseUrl + path, {
           method,
@@ -60,6 +63,7 @@ export function createApi(deps: ApiDeps) {
           body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
           signal: AbortSignal.any([AbortSignal.timeout(10_000), signalFor(gen)]),
         });
+        text = await res.text();
       } catch {
         if (!isCurrent(gen)) return STALE;
         if (isGet && retriesNet < 2) {
@@ -72,17 +76,18 @@ export function createApi(deps: ApiDeps) {
 
       let body: unknown = null;
       try {
-        body = JSON.parse(await res.text());
+        body = JSON.parse(text);
       } catch {
-        // JSON でない body (Gateway の HTML など) は無視する
+        // Gateway の HTML など。2xx なら壊れた応答、それ以外は HTTP_<status> で返す
+        if (res.ok) return { ok: false, code: "BAD_RESPONSE", status: res.status };
       }
       const b = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
 
       if (res.ok) return { ok: true, status: res.status, data: body as T, etag: res.headers.get("ETag") };
 
       if (res.status === 401) {
-        if (!forced) {
-          forced = true;
+        if (!refreshed) {
+          refreshed = forceNext = true;
           continue;
         }
         return { ok: false, code: "UNAUTHORIZED", status: 401 };

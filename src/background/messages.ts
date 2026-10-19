@@ -13,6 +13,14 @@ const INTERNAL: Fail = { ok: false, code: "INTERNAL" };
 const NOT_SERVER_MODE: Fail = { ok: false, code: "NOT_SERVER_MODE" };
 const MAX_IMAGE = 1_048_576;
 
+// 4項目だけを取り出す（他の field で settings を書き換えさせない）
+const pickConfig = (c: ServerConfig): ServerConfig => ({
+  apiBaseUrl: c.apiBaseUrl,
+  authBaseUrl: c.authBaseUrl,
+  clientId: c.clientId,
+  imageHost: c.imageHost,
+});
+
 export const isTrustedSender = (sender: chrome.runtime.MessageSender): boolean =>
   sender.id === chrome.runtime.id && !!sender.url?.startsWith(`chrome-extension://${chrome.runtime.id}/`);
 
@@ -76,7 +84,7 @@ export function parseMessage(raw: unknown): { kind: "ok"; msg: Message } | { kin
     case "alarms/reset":
       return ok({ type: m.type });
     case "config/save": {
-      const n = m.config && typeof m.config === "object" ? normalizeConfig(m.config as ServerConfig) : null;
+      const n = m.config && typeof m.config === "object" ? normalizeConfig(pickConfig(m.config as ServerConfig)) : null;
       return n?.ok ? ok({ type: m.type, config: n.config }) : { kind: "invalid" };
     }
     case "mode/change":
@@ -115,7 +123,7 @@ async function dispatch(msg: Message, gen: number): Promise<unknown> {
     case "auth/logout":
       return { ok: true, revoked: (await logout(clearLocal)).revoked };
     case "config/save": {
-      const n = normalizeConfig(msg.config);
+      const n = normalizeConfig(pickConfig(msg.config));
       if (!n.ok) return INVALID;
       return queue(() =>
         authLock(async () => {

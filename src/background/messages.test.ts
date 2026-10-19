@@ -145,6 +145,16 @@ it("config/save で接続先が変わると認証と cache と alarm が消え�
   expect(await alarmNames()).toEqual([]);
 });
 
+it("config/save は4項目だけを保存し、他の field で settings を書き換えない", async () => {
+  local().settings = { autoOpen: true, webPush: false, connectionType: "server", ...CFG };
+  const config = { ...CFG2, connectionType: "local", autoOpen: false, foo: 1 };
+  const parsed = m.parseMessage({ type: "config/save", config });
+  expect(parsed).toEqual({ kind: "ok", msg: { type: "config/save", config: CFG2 } });
+  // parseMessage を通らない入力でも同じ
+  await m.handleMessage({ type: "config/save", config } as unknown as Parameters<typeof m.handleMessage>[0]);
+  expect(local().settings).toEqual({ autoOpen: true, webPush: false, connectionType: "server", ...CFG2 });
+});
+
 it("config/save で接続先が変わらなければ消さない", async () => {
   loggedIn();
   local().serverCache = cache([dto("a")]);

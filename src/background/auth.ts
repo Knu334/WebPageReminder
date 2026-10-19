@@ -297,3 +297,66 @@ export async function getAuthStatus(): Promise<AuthStatus> {
     };
   });
 }
+
+// lock の順は queue → authLock なので、authLock を持ったまま clearLocal（queue を使う）を待たない
+export async function logout(
+  clearLocal: (gen: number) => Promise<void>,
+): Promise<{ revoked: boolean }> {
+  const s = await loadSettings();
+  const { gen, rt, rtKey } = await authLock(async () => {
+    const { authRefresh: r } = (await chrome.storage.local.get(
+      "authRefresh",
+    )) as { authRefresh?: AuthRefresh };
+    const gen = bumpGen();
+    await clearAuth();
+    return { gen, rt: r?.refreshToken, rtKey: r?.configKey };
+  });
+
+  // refresh token が無ければ失効させるものも無い（true）。別の接続先の token はここへ送らない（false）
+  let revoked = !rt;
+  if (rt && isConfigured(s) && rtKey === configKey(s)) {
+    try {
+      const res = await fetch(`${s.authBaseUrl}/oauth2/revoke`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ client_id: s.clientId, token: rt }),
+        // 1の bump の後の controller なので、次の login の成功でだけ中断される
+        signal: AbortSignal.any([AbortSignal.timeout(10_000), signalFor(gen)]),
+      });
+      revoked = res.status === 200;
+      if (!revoked) console.error("revoke failed", res.status);
+    } catch {
+      revoked = false;
+    }
+  }
+
+  await clearLocal(gen);
+
+  let pageOk = false;
+  if (isConfigured(s)) {
+    try {
+      const url =
+        `${s.authBaseUrl}/logout?` +
+        new URLSearchParams({
+          client_id: s.clientId,
+          logout_uri: chrome.identity.getRedirectURL("logout"),
+        });
+      await chrome.identity.launchWebAuthFlow({ url, interactive: true });
+      pageOk = true;
+    } catch {
+      // Cognito の cookie が残っている可能性がある
+    }
+  }
+
+  await authLock(async () => {
+    if (isCurrent(gen))
+      await setNotice(
+        !revoked
+          ? "REVOKE_FAILED"
+          : !pageOk
+            ? "LOGOUT_PAGE_FAILED"
+            : "LOGGED_OUT",
+      );
+  });
+  return { revoked };
+}

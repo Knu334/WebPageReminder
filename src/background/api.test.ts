@@ -109,3 +109,30 @@ it("token が取れなければ code を返し、abort は STALE", async () => {
   });
   expect(await api.getReminder("a")).toEqual({ ok: false, code: "STALE" });
 });
+
+it("force refresh は 401 の直後の1回だけ", async () => {
+  fetchMock.mockResolvedValueOnce(res(401)).mockResolvedValueOnce(res(429)).mockResolvedValueOnce(res(200, {}));
+  expect((await mk().getReminder("a")).ok).toBe(true);
+  expect(getToken.mock.calls.filter((c) => c[1]?.force)).toHaveLength(1);
+  expect(getToken).toHaveBeenCalledTimes(3);
+});
+
+it("body の読み取り失敗は通信障害として扱う", async () => {
+  const broken = () => {
+    const r = res(200, {});
+    vi.spyOn(r, "text").mockRejectedValue(new TypeError("reset"));
+    return r;
+  };
+  fetchMock.mockImplementation(async () => broken());
+  const api = mk();
+  expect(await api.getReminder("a")).toEqual({ ok: false, code: "NETWORK" });
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+  fetchMock.mockClear();
+  expect(await api.deleteReminder("a", '"e"')).toEqual({ ok: false, code: "UNKNOWN_RESULT" });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it("2xx で JSON が壊れていれば BAD_RESPONSE", async () => {
+  fetchMock.mockResolvedValue(res(200, "<html>"));
+  expect(await mk().getReminder("a")).toEqual({ ok: false, code: "BAD_RESPONSE", status: 200 });
+});

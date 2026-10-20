@@ -26,7 +26,8 @@ const TEXT = new Map<string, string>(Object.entries({
 
 // STALE は設定やログインが変わって古い操作をやめただけなので表示しない
 export const errorText = (code: string, status?: number): string | null => {
-  if (code === "STALE") return null;
+  // LOGIN_CANCELLED・LOGIN_FAILED は状態欄の notice に出るので、error としては重ねて出さない
+  if (code === "STALE" || code === "LOGIN_CANCELLED" || code === "LOGIN_FAILED") return null;
   if (status === 429) return RATE_TEXT;
   const t = TEXT.get(code);
   if (t) return t;

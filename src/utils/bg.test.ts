@@ -21,6 +21,10 @@ describe("errorText", () => {
     expect(errorText("STALE")).toBeNull();
     expect(errorText("X")).toBe("エラー（X）");
   });
+  it("R-ERR-11: hides login failures shown as the notice", () => {
+    expect(errorText("LOGIN_CANCELLED")).toBeNull();
+    expect(errorText("LOGIN_FAILED")).toBeNull();
+  });
 });
 
 describe("R-MSG-12: send", () => {

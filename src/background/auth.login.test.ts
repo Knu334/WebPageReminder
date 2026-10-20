@@ -97,7 +97,8 @@ it("R-LOGIN-08 R-LOGIN-09 R-LOGIN-10 R-LOGIN-05 R-STO-01 R-STO-04: code を交�
 });
 
 it.each([
-  ["reject", () => flow().mockRejectedValue(new Error("closed")), "LOGIN_CANCELLED"],
+  ["reject", () => flow().mockRejectedValue(new Error("The user did not approve access.")), "LOGIN_CANCELLED"],
+  ["page の error で reject", () => flow().mockRejectedValue(new Error("Authorization page could not be loaded.")), "LOGIN_FAILED"],
   ["undefined", () => flow().mockResolvedValue(undefined), "LOGIN_CANCELLED"],
   ["host 違い", () => callback("code=c1", "https://evil.test/cognito"), "LOGIN_FAILED"],
   ["path 違い", () => callback("code=c1", "https://test-ext-id.chromiumapp.org/logout"), "LOGIN_FAILED"],

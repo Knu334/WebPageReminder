@@ -38,7 +38,10 @@ npm run build
 
 設定の Connection Type で Server を選び、reminder-server の運用者から受け取った4つの値（API base URL、Auth base URL、Client ID、Image host）を入れて保存する。接続先へのアクセスを許可し、「ログイン」を押す。
 
-運用者に登録してもらう Callback URL と Logout URL は、同じ設定画面に表示される。
+運用者に登録してもらう Callback URL と Logout URL は、extension ID（`chrome://extensions` に表示される）から次の形で作る。
+
+- Callback URL: `https://<extension-id>.chromiumapp.org/cognito`
+- Logout URL: `https://<extension-id>.chromiumapp.org/logout`
 
 ## 開発
 

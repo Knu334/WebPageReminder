@@ -40,9 +40,9 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | 項目 | 数 |
 | --- | --- |
 | 要件 | 157 |
-| テストのある要件 | 141 |
-| テストの無い要件 | 16 |
-| テスト | 186 |
+| テストのある要件 | 142 |
+| テストの無い要件 | 15 |
+| テスト | 188 |
 | 要件 ID の無いテスト | 0 |
 
 ## 要件ごとのテスト
@@ -83,7 +83,7 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | --- | --- | --- |
 | R-STO-01 | chrome.storage.session / authSession / {accessToken, expiresAt, configKey} | [auth.login.test.ts](../src/background/auth.login.test.ts) › code を交換して保存する |
 | R-STO-02 | chrome.storage.session / authAttempt / {state, verifier, redirectUri, configKey, startedAt} | [auth.login.test.ts](../src/background/auth.login.test.ts) › 古い試行の finally が新しい試行を消さない |
-| R-STO-03 | chrome.storage.session / authNotice / {code, at}。code は LOGIN_FAILED、LOGIN_CANCELLED、REFRESH_FAILED（確定した更新の失敗）、LOGGED_O… | [auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: 11分後<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: code 無し<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: error=access_denied<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: host 違い<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: path 違い<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: reject<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: state 違い<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: undefined<br>[auth.logout.test.ts](../src/background/auth.logout.test.ts) › revoke が失敗しても端末の状態は消える: 503<br>[auth.logout.test.ts](../src/background/auth.logout.test.ts) › revoke が失敗しても端末の状態は消える: reject<br>[auth.refresh.test.ts](../src/background/auth.refresh.test.ts) › 10秒を過ぎた refreshPending があれば送らない<br>[auth.refresh.test.ts](../src/background/auth.refresh.test.ts) › invalid_grant で認証状態を消す<br>[auth.refresh.test.ts](../src/background/auth.refresh.test.ts) › refresh_token の無い応答は失敗 |
+| R-STO-03 | chrome.storage.session / authNotice / {code, at}。code は LOGIN_FAILED、LOGIN_CANCELLED、REFRESH_FAILED（確定した更新の失敗）、LOGGED_O… | [auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: 11分後<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: code 無し<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: error=access_denied<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: host 違い<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: page の error で reject<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: path 違い<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: reject<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: state 違い<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: undefined<br>[auth.logout.test.ts](../src/background/auth.logout.test.ts) › revoke が失敗しても端末の状態は消える: 503<br>[auth.logout.test.ts](../src/background/auth.logout.test.ts) › revoke が失敗しても端末の状態は消える: reject<br>[auth.refresh.test.ts](../src/background/auth.refresh.test.ts) › 10秒を過ぎた refreshPending があれば送らない<br>[auth.refresh.test.ts](../src/background/auth.refresh.test.ts) › invalid_grant で認証状態を消す<br>[auth.refresh.test.ts](../src/background/auth.refresh.test.ts) › refresh_token の無い応答は失敗 |
 | R-STO-04 | chrome.storage.local / authRefresh / {refreshToken, configKey} | [auth.login.test.ts](../src/background/auth.login.test.ts) › code を交換して保存する<br>[auth.refresh.test.ts](../src/background/auth.refresh.test.ts) › 新しい refresh token を access token より先に保存する |
 | R-STO-05 | chrome.storage.local / settings / SettingsType | [config.test.ts](../src/utils/config.test.ts) › config › loadSettings defaults when empty |
 | R-STO-06 | chrome.storage.local / reminders / local モードの一覧（既存） | [cache.test.ts](../src/background/cache.test.ts) › rebuildAlarms: local は reminders から作る<br>[notify.test.ts](../src/background/notify.test.ts) › local モードは今の動作（hidden を true にして保存） |
@@ -114,7 +114,7 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | R-LOGIN-04 | state と code_verifier を、それぞれ crypto.getRandomValues の 32 byte を padding なしの Base64URL（43文字）にして作る。code_challenge = BASE6… | [pkce.test.ts](../src/background/pkce.test.ts) › RFC 7636 appendix B<br>[pkce.test.ts](../src/background/pkce.test.ts) › randomToken |
 | R-LOGIN-05 | redirectUri = chrome.identity.getRedirectURL("cognito")。authAttempt を session に置き、開始時の authGen を記録する。 | [auth.login.test.ts](../src/background/auth.login.test.ts) › authorize の URL<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › code を交換して保存する |
 | R-LOGIN-06 | URLSearchParams で response_type=code、client_id、redirect_uri、scope=openid reminder-api/read reminder-api/write、state、cod… | [auth.login.test.ts](../src/background/auth.login.test.ts) › authorize の URL |
-| R-LOGIN-07 | 返った URL を検証する。次のどれかに当たれば交換へ進まない。 | [auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: 11分後<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: code 無し<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: error=access_denied<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: host 違い<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: path 違い<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: reject<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: state 違い<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: undefined |
+| R-LOGIN-07 | 返った URL を検証する。次のどれかに当たれば交換へ進まない。 | [auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: 11分後<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: code 無し<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: error=access_denied<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: host 違い<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: page の error で reject<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: path 違い<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: reject<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: state 違い<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換しない callback: undefined |
 | R-LOGIN-08 | POST &lt;authBase&gt;/oauth2/token に Content-Type: application/x-www-form-urlencoded で grant_type=authorization_code、client_i… | [auth.login.test.ts](../src/background/auth.login.test.ts) › code を交換して保存する<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 交換が 400 なら LOGIN_FAILED で、code を再送しない |
 | R-LOGIN-09 | 応答の access_token・refresh_token が文字列、token_type === "Bearer"、expires_in が正の数であることを検証する。 | [auth.login.test.ts](../src/background/auth.login.test.ts) › code を交換して保存する<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 応答の検証: expires_in 0<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › 応答の検証: token_type 小文字 |
 | R-LOGIN-10 | auth mutex の中で、authGen が開始時と一致することを確かめる（違えば捨てる）。先に authRefresh を local に保存し、そのあと authSession（expiresAt = now + expires_… | [auth.login.test.ts](../src/background/auth.login.test.ts) › code を交換して保存する<br>[auth.login.test.ts](../src/background/auth.login.test.ts) › logout 後に完了した login は保存しない<br>[messages.test.ts](../src/background/messages.test.ts) › login の後処理の前に logout が来たら、login の後処理は何もしない |
@@ -281,7 +281,6 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | R-UI-04 | 「保存」ボタン: 「設定」の節の手順。検証の error は欄の下に出す。 | — |
 | R-UI-05 | 状態: 未設定 / 許可なし（「許可する」ボタン）/ 未ログイン / ログイン中 / 要再ログイン / ログイン処理中 / 失効は未完了。 | — |
 | R-UI-06 | 「ログイン」/「ログアウト」ボタン。 | — |
-| R-UI-07 | callback URL と logout URL（getRedirectURL("cognito")、getRedirectURL("logout")）を読み取り専用で表示する。 | — |
 
 ### error の表示
 
@@ -297,12 +296,13 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | R-ERR-08 | OWNER_STORAGE_LIMIT_EXCEEDED / 保存できる上限（1000件・画像 128 MiB）を超えています | [bg.test.ts](../src/utils/bg.test.ts) › errorText › maps the spec table |
 | R-ERR-09 | 403 の各 code / 権限がありません（&lt;code&gt;） | [bg.test.ts](../src/utils/bg.test.ts) › errorText › maps the spec table |
 | R-ERR-10 | その他 / エラー（&lt;code&gt;） | [bg.test.ts](../src/utils/bg.test.ts) › errorText › hides STALE and formats unknown |
+| R-ERR-11 | LOGIN_CANCELLED、LOGIN_FAILED / 表示しない（状態欄の notice に出る） | [bg.test.ts](../src/utils/bg.test.ts) › errorText › hides login failures shown as the notice |
 
 ### log
 
 | 要件 ID | 要件 | テスト |
 | --- | --- | --- |
-| R-LOG-01 | token、認可 code、state、verifier、callback URL、署名 URL を log に出さない。console.error には code と status だけを出す。 | [messages.test.ts](../src/background/messages.test.ts) › 想定外の例外は reject せず INTERNAL を返す<br>[notify.test.ts](../src/background/notify.test.ts) › 通知の後に hideOnServer を呼び、失敗しても例外を投げない |
+| R-LOG-01 | token、認可 code、state、verifier、callback URL、署名 URL を log に出さない。console.error には code と status だけを出す。例外として、launchWebAuthFl… | [messages.test.ts](../src/background/messages.test.ts) › 想定外の例外は reject せず INTERNAL を返す<br>[notify.test.ts](../src/background/notify.test.ts) › 通知の後に hideOnServer を呼び、失敗しても例外を投げない |
 
 ## 要件 ID の無いテスト
 

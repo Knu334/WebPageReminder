@@ -16,7 +16,7 @@ const FIELDS: { key: keyof ServerConfig; label: string }[] = [
 const NOTICE: Partial<Record<string, string>> = {
   REVOKE_FAILED: "ログアウトしたが、server 側の失効は未完了（通信障害）",
   LOGOUT_PAGE_FAILED: "Cognito のログインの記録が残っている可能性がある",
-  LOGIN_FAILED: "ログインに失敗しました",
+  LOGIN_FAILED: "ログインに失敗しました（username・password の誤りなど）",
   LOGIN_CANCELLED: "ログインを取り消しました",
 };
 
@@ -149,14 +149,6 @@ export const ServerSettings: React.FC<{
       )}
       {error && <Label className="text-red-500">{error}</Label>}
 
-      <div className="space-y-1">
-        <Label htmlFor="callback-url">Callback URL</Label>
-        <Input id="callback-url" readOnly value={chrome.identity.getRedirectURL("cognito")} />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="logout-url">Logout URL</Label>
-        <Input id="logout-url" readOnly value={chrome.identity.getRedirectURL("logout")} />
-      </div>
     </div>
   );
 };

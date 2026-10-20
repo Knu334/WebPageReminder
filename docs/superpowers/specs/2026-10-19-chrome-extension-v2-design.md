@@ -134,7 +134,7 @@ interface SettingsType {
 4. [R-LOGIN-05] `redirectUri = chrome.identity.getRedirectURL("cognito")`。`authAttempt` を session に置き、開始時の `authGen` を記録する。
 5. [R-LOGIN-06] `URLSearchParams` で `response_type=code`、`client_id`、`redirect_uri`、`scope=openid reminder-api/read reminder-api/write`、`state`、`code_challenge`、`code_challenge_method=S256` を組み、`<authBase>/oauth2/authorize` を `launchWebAuthFlow({url, interactive: true})` で開く。popup は閉じてよい。処理は background で続き、popup は開き直した時に `auth/status` で結果を表示する。
 6. [R-LOGIN-07] 返った URL を検証する。次のどれかに当たれば交換へ進まない。
-   - URL が `undefined`、または `launchWebAuthFlow` が reject した（取り消し）
+   - URL が `undefined`、または `launchWebAuthFlow` が reject した（取り消し）。ただし reject の message が `Authorization page could not be loaded.` の時は失敗として扱う（Cognito が error の page を返すと、Chrome が window を閉じてこの message で reject するため。password の誤りなど）
    - origin と pathname が `redirectUri` と一致しない
    - `state` が `authAttempt.state` と一致しない
    - `startedAt` から10分を過ぎた
@@ -300,7 +300,6 @@ message:
   - [R-UI-04] 「保存」ボタン: 「設定」の節の手順。検証の error は欄の下に出す。
   - [R-UI-05] 状態: 未設定 / 許可なし（「許可する」ボタン）/ 未ログイン / ログイン中 / 要再ログイン / ログイン処理中 / 失効は未完了。
   - [R-UI-06] 「ログイン」/「ログアウト」ボタン。
-  - [R-UI-07] callback URL と logout URL（`getRedirectURL("cognito")`、`getRedirectURL("logout")`）を読み取り専用で表示する。
 
 ## error の表示
 
@@ -318,10 +317,11 @@ popup は `code` を次の文言にして Label に出す。
 | [R-ERR-08] `OWNER_STORAGE_LIMIT_EXCEEDED` | 保存できる上限（1000件・画像 128 MiB）を超えています |
 | [R-ERR-09] 403 の各 code | 権限がありません（<code>） |
 | [R-ERR-10] その他 | エラー（<code>） |
+| [R-ERR-11] `LOGIN_CANCELLED`、`LOGIN_FAILED` | 表示しない（状態欄の notice に出る） |
 
 ## log
 
-[R-LOG-01] token、認可 code、`state`、`verifier`、callback URL、署名 URL を log に出さない。`console.error` には code と status だけを出す。
+[R-LOG-01] token、認可 code、`state`、`verifier`、callback URL、署名 URL を log に出さない。`console.error` には code と status だけを出す。例外として、`launchWebAuthFlow` の reject の message（Chrome の固定の文言で、URL や code を含まない）は出してよい。
 
 ## 採らないこと
 

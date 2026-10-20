@@ -156,10 +156,19 @@ async function exchange(
   let returned: string | undefined;
   try {
     returned = await chrome.identity.launchWebAuthFlow({ url, interactive: true });
-  } catch {
+  } catch (e) {
+    // Chrome の message は固定の文言で、URL や code を含まない
+    const message = (e as Error)?.message;
+    // Cognito が error の page（password の誤りなど）を返すと、Chrome は window を閉じてこの message で reject する
+    // shortcut: Chrome の message に仕様は無く文言で判定する。文言が変わったら取り消し扱いに戻るので、その時は判定を見直す
+    const failed = message === "Authorization page could not be loaded.";
+    console.error(failed ? "login failed" : "login cancelled", message);
+    return failed ? LOGIN_FAILED : LOGIN_CANCELLED;
+  }
+  if (!returned) {
+    console.error("login cancelled", "no url");
     return LOGIN_CANCELLED;
   }
-  if (!returned) return LOGIN_CANCELLED;
   const cb = new URL(returned);
   const code = cb.searchParams.get("code");
   if (

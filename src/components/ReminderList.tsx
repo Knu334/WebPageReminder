@@ -24,17 +24,11 @@ export const ReminderList: React.FC<{
             .filter((r: Reminder) => {
               return !r.hidden;
             })
-            .sort((a, b) => {
-              const aDate = new Date(a.reminderTime);
-              const bDate = new Date(b.reminderTime);
-              if (aDate === bDate) {
-                return 0;
-              } else if (aDate < bDate) {
-                return -1;
-              } else {
-                return 1;
-              }
-            })
+            .sort(
+              (a, b) =>
+                new Date(a.reminderTime).getTime() -
+                new Date(b.reminderTime).getTime()
+            )
             .map((reminder) => (
               <CarouselItem key={reminder.id}>
                 <Card

@@ -297,3 +297,54 @@ it("R-LOG-01: 想定外の例外は reject せず INTERNAL を返す", async () 
   });
   expect(console.error).toHaveBeenCalledWith("message failed", "auth/status", "Error");
 });
+
+// login・画像つきの同期・作成・status・logout を通し、popup への応答と console の出力を集める
+const SECRETS = ["AT-secret", "RT-secret", "X-Amz-Signature"];
+const runFlow = async () => {
+  const bytes = new Uint8Array([1, 2, 3]);
+  const sha256 = await (await import("@/background/pkce")).sha256Hex(bytes.slice().buffer);
+  const th = { imageId: "img1", mime: "image/png", bytes: 3, sha256 };
+  routes["/oauth2/token"] = () => json({ ...tokens, access_token: "AT-secret", refresh_token: "RT-secret" });
+  routes["/v2/reminders?limit=50"] = () => json({ items: [{ ...dto("a"), thumbnail: th }], nextCursor: null });
+  routes["/thumbnail-url"] = () => json({ url: "https://img.test/k?X-Amz-Signature=sig", expiresAt: FUTURE, imageId: "img1", revision: 1 });
+  routes["https://img.test/"] = () => new Response(bytes);
+  routes["/v2/reminders"] = () => json(dto("r1"), 201);
+  const logs = (["error", "warn", "info", "log", "debug"] as const).map((k) => vi.spyOn(console, k).mockImplementation(() => {}));
+  const login = await handle({ type: "auth/login" });
+  // login が始めた同期の終わりを待つ
+  await vi.waitFor(() => expect((local().serverCache as ServerCache | undefined)?.images.a).toBeDefined());
+  const out = [
+    login,
+    await handle({ type: "reminders/list", fresh: true }),
+    await handle({ type: "reminders/create", reminder: reminder() }),
+    await handle({ type: "auth/status" }),
+    await handle({ type: "auth/logout" }),
+  ];
+  return { out, logs: logs.map((l) => l.mock.calls) };
+};
+
+it("R-MSG-14 R-STO-12: token と署名 URL を popup・storage.sync・log に出さない", async () => {
+  const sync = { get: vi.fn(), set: vi.fn(), remove: vi.fn() };
+  (ch().storage as unknown as { sync: typeof sync }).sync = sync;
+  const { out, logs } = await runFlow();
+  expect(out[1]).toMatchObject({ ok: true, reminders: [{ id: "a", thumbnail: "data:image/png;base64,AQID" }] });
+  expect(out[2]).toMatchObject({ ok: true });
+  const text = JSON.stringify({ out, logs });
+  for (const s of SECRETS) expect(text).not.toContain(s);
+  expect([sync.get, sync.set, sync.remove].every((f) => f.mock.calls.length === 0)).toBe(true);
+});
+
+it("R-API-02: Cognito・API・S3 のすべての fetch に10秒の timeout を付ける", async () => {
+  const spy = vi.spyOn(AbortSignal, "timeout").mockImplementation(() => AbortSignal.abort());
+  // logout で世代の signal も abort されるので、呼んだ時点の状態を記録する
+  const abortedAtCall: boolean[] = [];
+  vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+    abortedAtCall.push(init?.signal?.aborted === true);
+    return fetchMock(url);
+  });
+  await runFlow();
+  for (const p of ["/oauth2/token", "/oauth2/revoke", "https://img.test/", "/v2/reminders"]) expect(fetchCalls(p)).toBeGreaterThan(0);
+  expect(spy.mock.calls).toEqual(fetchMock.mock.calls.map(() => [10_000]));
+  // abort 済みの signal を返したので、fetch に渡っていれば aborted
+  expect(abortedAtCall).toEqual(fetchMock.mock.calls.map(() => true));
+});

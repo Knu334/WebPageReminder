@@ -112,3 +112,11 @@ it("R-GEN-02 R-SYNC-17: rebuildAlarms と clearServerAlarms: 古い世代は cle
   await a.clearServerAlarms(g.currentGen());
   expect(ch().alarms.clearAll).toHaveBeenCalledTimes(1);
 });
+
+it("R-DTO-03: toReminders: thumbnail と hidden 以外の field は DTO の値", () => {
+  const d = dto("a", { url: "https://e.test/", title: "T", reminderTime: "2099-02-03T04:05:06.000Z", autoOpen: true, webPush: true, createdAt: "2026-01-01T00:00:00.000Z" });
+  expect(c.toReminders(cache([d]), new Set())).toEqual([{
+    id: "a", url: "https://e.test/", title: "T", thumbnail: NO.NO_DATA.thumbnail, reminderTime: "2099-02-03T04:05:06.000Z",
+    autoOpen: true, webPush: true, createdAt: "2026-01-01T00:00:00.000Z", hidden: false,
+  }]);
+});

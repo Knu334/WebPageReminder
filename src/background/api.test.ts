@@ -136,3 +136,52 @@ it("R-API-03: 2xx で JSON が壊れていれば BAD_RESPONSE", async () => {
   fetchMock.mockResolvedValue(res(200, "<html>"));
   expect(await mk().getReminder("a")).toEqual({ ok: false, code: "BAD_RESPONSE", status: 200 });
 });
+
+it("R-API-02: API の fetch に10秒の timeout を付ける", async () => {
+  const spy = vi.spyOn(AbortSignal, "timeout").mockImplementation(() => AbortSignal.abort());
+  fetchMock.mockImplementation(async () => res(200, {}));
+  const api = mk();
+  await api.listPage(null);
+  await api.getReminder("a");
+  await api.deleteReminder("a", '"e"');
+  expect(spy.mock.calls).toEqual([[10_000], [10_000], [10_000]]);
+  // abort 済みの signal を返したので、fetch に渡っていれば aborted
+  expect(fetchMock.mock.calls.every((c) => c[1].signal.aborted)).toBe(true);
+});
+
+it("R-API-09: その他の status は再試行せず code と status を返す", async () => {
+  fetchMock.mockResolvedValueOnce(res(404, { code: "NOT_FOUND" }));
+  expect(await mk().getReminder("a")).toEqual({ ok: false, code: "NOT_FOUND", status: 404 });
+  fetchMock.mockResolvedValueOnce(res(409, { code: "PRECONDITION", message: "m" }));
+  expect(await mk().deleteReminder("a", '"e"')).toEqual({ ok: false, code: "PRECONDITION", status: 409, message: "m" });
+  fetchMock.mockResolvedValueOnce(res(500, "<html>"));
+  expect(await mk().getReminder("a")).toEqual({ ok: false, code: "HTTP_500", status: 500 });
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+  expect(sleep).not.toHaveBeenCalled();
+});
+
+it("R-API-10: listPage の query", async () => {
+  fetchMock.mockImplementation(async () => res(200, { items: [], nextCursor: null }));
+  const api = mk();
+  await api.listPage(null);
+  await api.listPage("a b/c&d");
+  expect(fetchMock.mock.calls.map((c) => [c[0], c[1].method])).toEqual([
+    ["https://api.test/v2/reminders?limit=50", "GET"],
+    ["https://api.test/v2/reminders?limit=50&cursor=a%20b%2Fc%26d", "GET"],
+  ]);
+});
+
+it("R-API-12: createReminder は POST /v2/reminders", async () => {
+  fetchMock.mockResolvedValue(res(201, {}));
+  const body = { id: "a", url: "u", title: "t", reminderTime: "x", autoOpen: true, webPush: false, hidden: false as const, thumbnail: null };
+  await mk().createReminder(body);
+  const [url, init] = fetchMock.mock.calls[0];
+  expect([url, init.method, JSON.parse(init.body)]).toEqual(["https://api.test/v2/reminders", "POST", body]);
+});
+
+it("R-API-15: getThumbnailUrl は GET /v2/reminders/{id}/thumbnail-url", async () => {
+  fetchMock.mockResolvedValue(res(200, {}));
+  await mk().getThumbnailUrl("a/b");
+  const [url, init] = fetchMock.mock.calls[0];
+  expect([url, init.method]).toEqual(["https://api.test/v2/reminders/a%2Fb/thumbnail-url", "GET"]);
+});

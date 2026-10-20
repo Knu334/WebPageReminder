@@ -259,3 +259,11 @@ it("R-REFRESH-04 R-STO-09: clearAuth は authSession・authRefresh・refreshPend
   expect(session()._data.refreshPending).toBeUndefined();
   expect(session()._data.authNotice).toBeDefined();
 });
+
+it("R-REFRESH-10: refresh の fetch の timeout は4秒", async () => {
+  const spy = vi.spyOn(AbortSignal, "timeout").mockImplementation(() => AbortSignal.abort());
+  fetchMock.mockResolvedValue(res(200, okBody()));
+  expect(await auth.getAccessToken(g.currentGen())).toEqual({ ok: true, token: "a2" });
+  expect(spy.mock.calls).toEqual([[4_000]]);
+  expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
+});

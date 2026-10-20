@@ -39,10 +39,10 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 
 | 項目 | 数 |
 | --- | --- |
-| 要件 | 157 |
-| テストのある要件 | 131 |
+| 要件 | 160 |
+| テストのある要件 | 134 |
 | テストの無い要件 | 26 |
-| テスト | 176 |
+| テスト | 183 |
 | 要件 ID の無いテスト | 0 |
 
 ## 要件ごとのテスト
@@ -281,6 +281,14 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | R-UI-04 | 「保存」ボタン: 「設定」の節の手順。検証の error は欄の下に出す。 | — |
 | R-UI-05 | 状態: 未設定 / 許可なし（「許可する」ボタン）/ 未ログイン / ログイン中 / 要再ログイン / ログイン処理中 / 失効は未完了。 | — |
 | R-UI-06 | 「ログイン」/「ログアウト」ボタン。 | — |
+
+### 日時の入力（DateTimePicker.tsx）
+
+| 要件 ID | 要件 | テスト |
+| --- | --- | --- |
+| R-PICK-01 | 年・月を変えて、その月に無い日になる時は月末にする（1/31 で2月を選ぶと 2/28。翌月に繰り上げない）。時・分は変えない。 | [date.test.ts](../src/utils/date.test.ts) › その月に無い日は月末にする<br>[date.test.ts](../src/utils/date.test.ts) › 年を変えて 2/29 が無ければ 2/28 にする<br>[date.test.ts](../src/utils/date.test.ts) › 時・分を変え、元の Date は書き換えない<br>[date.test.ts](../src/utils/date.test.ts) › 月を変えて日が溢れたら月末にする |
+| R-PICK-02 | 日の選択肢は、選んでいる年・月の日数だけにする。 | [date.test.ts](../src/utils/date.test.ts) › daysInMonth は閏年を考える<br>[date.test.ts](../src/utils/date.test.ts) › その月に無い日は月末にする |
+| R-PICK-03 | YouTube の配信予定の「M月D日 H:MM」は、今年のその日時（秒は0）として読む。月と日は一度に設定し、今日の日付から繰り上げない。存在しない日時は読まない。 | [date.test.ts](../src/utils/date.test.ts) › YouTube の時刻は今日の日付から繰り上げずに読む<br>[date.test.ts](../src/utils/date.test.ts) › 形式が違う、または存在しない日時は null |
 
 ### error の表示
 

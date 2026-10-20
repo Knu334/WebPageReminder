@@ -12,6 +12,7 @@ import { NO_DATA } from "./utils/nodataUtils";
 import { loadSettings } from "@/utils/config";
 import { makeCall } from "@/utils/bg";
 import { canvasHalve, shrinkToLimit } from "@/utils/image";
+import { parseYouTubeTime } from "@/utils/date";
 import { ConnectionType, Fail, Reminder, ServerConfig, SettingsType } from "@/types/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -80,23 +81,10 @@ function App() {
               return el ? el.innerText : null;
             },
           });
-          if (ytTimeElement && ytTimeElement.result) {
-            const ytTimeGroup =
-              /^(\d+)月(\d+)日 (\d+):(\d+)$/.exec(ytTimeElement.result) || [];
-            if (ytTimeGroup.length == 5) {
-              const ytTimeArray = ytTimeGroup
-                .slice(1)
-                .map((p) => parseInt(p, 10));
-              const ytTime = new Date();
-              ytTime.setMonth(ytTimeArray[0] - 1);
-              ytTime.setDate(ytTimeArray[1]);
-              ytTime.setHours(ytTimeArray[2]);
-              ytTime.setMinutes(ytTimeArray[3]);
-              ytTime.setSeconds(0);
-              ytTime.setMilliseconds(0);
-              setReminderTime(ytTime);
-            }
-          }
+          const ytTime = ytTimeElement?.result
+            ? parseYouTubeTime(ytTimeElement.result, new Date())
+            : null;
+          if (ytTime) setReminderTime(ytTime);
         }
       }
     })();

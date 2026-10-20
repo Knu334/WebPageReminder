@@ -128,14 +128,7 @@ function App() {
     if (!tab.url || !tab.title) return;
 
     if (reminderTime.getTime() <= Date.now()) {
-      console.log("Past date cannot be set.");
-      const status = document.getElementById("status");
-      if (status) {
-        status.hidden = false;
-        setTimeout(() => {
-          status.hidden = true;
-        }, 3000);
-      }
+      setError("Past date cannot be set.");
       return;
     }
 
@@ -244,15 +237,18 @@ function App() {
       <TabsContent value="reminders">
         <div className="space-y-6">
           <div className="space-y-4">
-            <DateTimePicker value={reminderTime} onChange={setReminderTime} />
+            <DateTimePicker
+              value={reminderTime}
+              onChange={(d) => {
+                setReminderTime(d);
+                setError(null);
+              }}
+            />
             <Button onClick={handleAddReminder} className="w-full">
               Create Reminder
             </Button>
           </div>
 
-          <Label id="status" className="text-red-500" hidden={true}>
-            Past date cannot be set.
-          </Label>
           {error && <Label className="text-red-500">{error}</Label>}
 
           <div className="space-y-4 grid justify-center">

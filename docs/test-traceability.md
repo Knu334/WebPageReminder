@@ -40,9 +40,9 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | 項目 | 数 |
 | --- | --- |
 | 要件 | 160 |
-| テストのある要件 | 134 |
-| テストの無い要件 | 26 |
-| テスト | 183 |
+| テストのある要件 | 145 |
+| テストの無い要件 | 15 |
+| テスト | 195 |
 | 要件 ID の無いテスト | 0 |
 
 ## 要件ごとのテスト
@@ -91,8 +91,8 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | R-STO-08 | chrome.storage.local / notified:&lt;id&gt; / 通知した時刻。server モードで通知済みの項目ごとに1つの key（1つの map にしないので、読んで書き直す競合が起きない）。cache の queue… | [cache.test.ts](../src/background/cache.test.ts) › notified の同時の記録がどちらも残る |
 | R-STO-09 | chrome.storage.session / refreshPending / {refreshTokenHash, firstSentAt}。結果が不明な refresh の記録。token そのものは入れず、SHA-256 の h… | [auth.refresh.test.ts](../src/background/auth.refresh.test.ts) › clearAuth は authSession・authRefresh・refreshPending を消す<br>[pkce.test.ts](../src/background/pkce.test.ts) › sha256Hex |
 | R-STO-10 | configKey は、正規化した apiBaseUrl、authBaseUrl、clientId、imageHost を  /  でつないだ文字列。今の設定と違う認証状態・cache は使わずに消す。 | [cache.test.ts](../src/background/cache.test.ts) › readCache: configKey が違う cache は空になり消える<br>[config.test.ts](../src/utils/config.test.ts) › config › key and patterns |
-| R-STO-11 | background の起動時と onInstalled で chrome.storage.local.setAccessLevel({accessLevel: "TRUSTED_CONTEXTS"}) を呼ぶ。 | — |
-| R-STO-12 | token を chrome.storage.sync、DOM、URL、log に置かない。 | — |
+| R-STO-11 | background の起動時と onInstalled で chrome.storage.local.setAccessLevel({accessLevel: "TRUSTED_CONTEXTS"}) を呼ぶ。 | [background.test.ts](../src/background.test.ts) › 起動時と onInstalled で setAccessLevel を呼ぶ |
+| R-STO-12 | token を chrome.storage.sync、DOM、URL、log に置かない。 | [messages.test.ts](../src/background/messages.test.ts) › token と署名 URL を popup・storage.sync・log に出さない |
 
 ### 世代と直列化
 
@@ -141,7 +141,7 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | R-REFRESH-07 | 通信障害・timeout の時は refreshPending を残す。10秒以内なら backoff（0.5秒、1秒）で再送し、10秒を過ぎる再送はしない。refresh token は消さず、NETWORK を返す。 | [auth.refresh.test.ts](../src/background/auth.refresh.test.ts) › 10秒を過ぎた refreshPending があれば送らない<br>[auth.refresh.test.ts](../src/background/auth.refresh.test.ts) › 10秒以内の refreshPending は再送する<br>[auth.refresh.test.ts](../src/background/auth.refresh.test.ts) › 通信障害では消さない |
 | R-REFRESH-08 | 呼び出しや worker の再起動を跨いでも refreshPending で同じ判定をする。session storage なので Chrome の再起動では消えるが、その時はすでに10秒を過ぎており、次の refresh の inva… | [auth.refresh.test.ts](../src/background/auth.refresh.test.ts) › 10秒以内の refreshPending は再送する |
 | R-REFRESH-09 | 5xx は Cognito が処理しなかった応答として扱い、refreshPending を消して、上と同じ backoff で再送する。 | [auth.refresh.test.ts](../src/background/auth.refresh.test.ts) › 5xx は refreshPending を消して backoff で再送する |
-| R-REFRESH-10 | refresh の fetch の timeout は 4秒（全体の10秒の例外。10秒の猶予の中で再送できるようにするため）。 | — |
+| R-REFRESH-10 | refresh の fetch の timeout は 4秒（全体の10秒の例外。10秒の猶予の中で再送できるようにするため）。 | [auth.refresh.test.ts](../src/background/auth.refresh.test.ts) › refresh の fetch の timeout は4秒 |
 
 ### logout
 
@@ -165,20 +165,20 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | 要件 ID | 要件 | テスト |
 | --- | --- | --- |
 | R-API-01 | request(method, path, {body, ifMatch}): getAccessToken() の token を Authorization: Bearer で付ける。body は Content-Type: appl… | [api.test.ts](../src/background/api.test.ts) › Bearer と JSON を付ける<br>[api.test.ts](../src/background/api.test.ts) › 送る前に世代を確かめる |
-| R-API-02 | すべての fetch（API、Cognito、S3）に AbortSignal.timeout(10_000) を付ける。refresh だけは 4秒（「refresh」の節）。timeout は通信障害として扱う。 | — |
+| R-API-02 | すべての fetch（API、Cognito、S3）に AbortSignal.timeout(10_000) を付ける。refresh だけは 4秒（「refresh」の節）。timeout は通信障害として扱う。 | [api.test.ts](../src/background/api.test.ts) › API の fetch に10秒の timeout を付ける<br>[messages.test.ts](../src/background/messages.test.ts) › Cognito・API・S3 のすべての fetch に10秒の timeout を付ける |
 | R-API-03 | 戻り値は {ok: true, status, data, etag} か {ok: false, status, code, message}。code は body の code、無ければ status から決める（Gateway の… | [api.test.ts](../src/background/api.test.ts) › 2xx で JSON が壊れていれば BAD_RESPONSE<br>[api.test.ts](../src/background/api.test.ts) › body の読み取り失敗は通信障害として扱う<br>[api.test.ts](../src/background/api.test.ts) › token が取れなければ code を返し、abort は STALE |
 | R-API-04 | 401 / 強制的に refresh して1回だけ再送する。再び 401 なら UNAUTHORIZED | [api.test.ts](../src/background/api.test.ts) › 401 で1回だけ force refresh して再送する<br>[api.test.ts](../src/background/api.test.ts) › force refresh は 401 の直後の1回だけ |
 | R-API-05 | 403 / 返す。再試行しない | [api.test.ts](../src/background/api.test.ts) › 403 は再試行しない |
 | R-API-06 | 429 / Retry-After（無ければ1秒）に 0〜1 秒の jitter を足し、最大2回再試行 | [api.test.ts](../src/background/api.test.ts) › 429 は Retry-After と jitter で最大2回<br>[api.test.ts](../src/background/api.test.ts) › JSON でない 429 は1秒待つ |
 | R-API-07 | 503・通信障害（GET） / jitter 付き backoff（0.5秒、1秒）で最大2回 | [api.test.ts](../src/background/api.test.ts) › GET の通信障害は 0.5秒・1秒で最大2回、書き込みは再送しない<br>[api.test.ts](../src/background/api.test.ts) › body の読み取り失敗は通信障害として扱う |
 | R-API-08 | 503・通信障害（POST・PATCH・DELETE） / 自動で再送しない。UNKNOWN_RESULT を返し、呼び出し側が GET で照合する | [api.test.ts](../src/background/api.test.ts) › GET の通信障害は 0.5秒・1秒で最大2回、書き込みは再送しない |
-| R-API-09 | その他 / そのまま返す | — |
-| R-API-10 | listPage(cursor): GET /v2/reminders?limit=50&cursor= | — |
+| R-API-09 | その他 / そのまま返す | [api.test.ts](../src/background/api.test.ts) › その他の status は再試行せず code と status を返す |
+| R-API-10 | listPage(cursor): GET /v2/reminders?limit=50&cursor= | [api.test.ts](../src/background/api.test.ts) › listPage の query |
 | R-API-11 | getReminder(id): GET /v2/reminders/{id} → DTO と ETag | [api.test.ts](../src/background/api.test.ts) › Bearer と JSON を付ける |
-| R-API-12 | createReminder(body): POST /v2/reminders | — |
+| R-API-12 | createReminder(body): POST /v2/reminders | [api.test.ts](../src/background/api.test.ts) › createReminder は POST /v2/reminders |
 | R-API-13 | patchReminder(id, patch, etag): PATCH、If-Match: etag | [api.test.ts](../src/background/api.test.ts) › PATCH と DELETE に If-Match を付ける |
 | R-API-14 | deleteReminder(id, etag): DELETE、If-Match: etag | [api.test.ts](../src/background/api.test.ts) › PATCH と DELETE に If-Match を付ける |
-| R-API-15 | getThumbnailUrl(id): GET /v2/reminders/{id}/thumbnail-url | — |
+| R-API-15 | getThumbnailUrl(id): GET /v2/reminders/{id}/thumbnail-url | [api.test.ts](../src/background/api.test.ts) › getThumbnailUrl は GET /v2/reminders/{id}/thumbnail-url |
 | R-API-16 | S3 の画像の fetch は api.ts を通さず、Bearer を付けない。 | [sync.list.test.ts](../src/background/sync.list.test.ts) › 画像を取得して data URL で保存する。S3 には Authorization を付けず redirect: error |
 
 ### 書き込みの手順（sync.ts）
@@ -228,7 +228,7 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | --- | --- | --- |
 | R-DTO-01 | thumbnail: cache の画像の imageId・sha256 が DTO の thumbnail と一致する時だけ、その data URL。一致しない、または画像が無ければ NO_DATA.thumbnail。 | [cache.test.ts](../src/background/cache.test.ts) › toReminders: thumbnail は imageId と sha256 が一致する時だけ、notified は hidden |
 | R-DTO-02 | hidden: DTO の hidden、または id が notifiedIds にあれば true。 | [cache.test.ts](../src/background/cache.test.ts) › toReminders: thumbnail は imageId と sha256 が一致する時だけ、notified は hidden |
-| R-DTO-03 | それ以外の field は DTO の値。Reminder 型は変えない。 | — |
+| R-DTO-03 | それ以外の field は DTO の値。Reminder 型は変えない。 | [cache.test.ts](../src/background/cache.test.ts) › toReminders: thumbnail と hidden 以外の field は DTO の値 |
 
 ### 作成と削除（popup → background）
 
@@ -250,7 +250,7 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | R-ALARM-01 | server モードの onAlarm と notifications.onClicked は、serverCache から項目を探し、通知とタブの判断を cache だけで行う。通知とタブの処理は今のまま。 | [notify.test.ts](../src/background/notify.test.ts) › 通知の click で cache の URL を開いて通知を消す |
 | R-ALARM-02 | onAlarm は、次のすべてを満たす時だけ通知する: 今のモードが server、cache に項目がある、hidden:false、id が notifiedIds に無い、reminderTime が今から1分後より前。 | [notify.test.ts](../src/background/notify.test.ts) › 通知済み・hidden・1分より先・cache に無い項目は通知しない: 1分より先<br>[notify.test.ts](../src/background/notify.test.ts) › 通知済み・hidden・1分より先・cache に無い項目は通知しない: cache に無い<br>[notify.test.ts](../src/background/notify.test.ts) › 通知済み・hidden・1分より先・cache に無い項目は通知しない: hidden<br>[notify.test.ts](../src/background/notify.test.ts) › 通知済み・hidden・1分より先・cache に無い項目は通知しない: 通知済み |
 | R-ALARM-03 | 通知の直前に、queue を通さず notifiedIds[id] を書く（長い同期を待たずに再通知を防ぐ）。そのあと queue の中で、非表示にする手順を best effort で試す。失敗しても log（code と status… | [notify.test.ts](../src/background/notify.test.ts) › 通知の前に notified:&lt;id&gt; を書く<br>[notify.test.ts](../src/background/notify.test.ts) › 通知の後に hideOnServer を呼び、失敗しても例外を投げない |
-| R-ALARM-05 | onInstalled は、モードに応じて local の reminders か serverCache から alarm を設定し直す。 | — |
+| R-ALARM-05 | onInstalled は、モードに応じて local の reminders か serverCache から alarm を設定し直す。 | [background.test.ts](../src/background.test.ts) › onInstalled は local モードの一覧から alarm を作り直す<br>[background.test.ts](../src/background.test.ts) › onInstalled は server モードの一覧から alarm を作り直す |
 
 ### message（messages.ts）
 
@@ -269,7 +269,7 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | R-MSG-11 | type ごとに入力を実行時に検証する。未知の type は無視する。reminders/\* は server モードでなければ NOT_SERVER_MODE を返す。create は各 field の型と大きさ（server の制限と… | [messages.test.ts](../src/background/messages.test.ts) › isValidId › "" は不可<br>[messages.test.ts](../src/background/messages.test.ts) › isValidId › "\ud800" は不可<br>[messages.test.ts](../src/background/messages.test.ts) › isValidId › "a\u0000" は不可<br>[messages.test.ts](../src/background/messages.test.ts) › isValidId › "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" は不可<br>[messages.test.ts](../src/background/messages.test.ts) › isValidId › "a" は不可<br>[messages.test.ts](../src/background/messages.test.ts) › isValidId › 1 は不可<br>[messages.test.ts](../src/background/messages.test.ts) › isValidId › 123e4567-e89b-42d3-a456-426614174000 は可<br>[messages.test.ts](../src/background/messages.test.ts) › isValidId › 😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀 は可<br>[messages.test.ts](../src/background/messages.test.ts) › local モードの reminders/list は NOT_SERVER_MODE<br>[messages.test.ts](../src/background/messages.test.ts) › parseMessage › config/save の不正な URL は invalid、正しければ正規化する<br>[messages.test.ts](../src/background/messages.test.ts) › parseMessage › reminders/create の 1 MiB を超える画像 は invalid<br>[messages.test.ts](../src/background/messages.test.ts) › parseMessage › reminders/create の 1025 文字の title は invalid<br>[messages.test.ts](../src/background/messages.test.ts) › parseMessage › reminders/create の 4097 文字の url は invalid<br>[messages.test.ts](../src/background/messages.test.ts) › parseMessage › reminders/create の autoOpen が "true" は invalid<br>[messages.test.ts](../src/background/messages.test.ts) › parseMessage › reminders/create の ftp の url は invalid<br>[messages.test.ts](../src/background/messages.test.ts) › parseMessage › reminders/create の offset の無い reminderTime は invalid<br>[messages.test.ts](../src/background/messages.test.ts) › parseMessage › その他の入力の検証<br>[messages.test.ts](../src/background/messages.test.ts) › parseMessage › 未知の type は unknown<br>[messages.test.ts](../src/background/messages.test.ts) › parseMessage › 正しい reminders/create と境界の大きさは ok |
 | R-MSG-12 | popup は sendMessage の reject（worker の停止などで channel が切れた）を NETWORK として表示し、次の操作か開き直しで reminders/list と auth/status を読み直す。 | [bg.test.ts](../src/utils/bg.test.ts) › makeCall › NETWORK marks disconnected and sets the error<br>[bg.test.ts](../src/utils/bg.test.ts) › makeCall › STALE sets no error text<br>[bg.test.ts](../src/utils/bg.test.ts) › makeCall › ok sets no error<br>[bg.test.ts](../src/utils/bg.test.ts) › send › maps a rejected sendMessage to NETWORK<br>[bg.test.ts](../src/utils/bg.test.ts) › send › returns the response |
 | R-MSG-13 | API の body は、許可した field だけから組み立てる。 | [sync.write.test.ts](../src/background/sync.write.test.ts) › 201 で成功し cache に入る |
-| R-MSG-14 | token、署名 URL を popup に返さない。 | — |
+| R-MSG-14 | token、署名 URL を popup に返さない。 | [messages.test.ts](../src/background/messages.test.ts) › token と署名 URL を popup・storage.sync・log に出さない |
 
 ### 設定画面（Settings.tsx）
 

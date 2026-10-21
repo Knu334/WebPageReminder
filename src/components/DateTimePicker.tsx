@@ -6,6 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { daysInMonth, setDateField, type DateField } from "@/utils/date";
 
 export const DateTimePicker: React.FC<{
   value: Date;
@@ -16,31 +17,15 @@ export const DateTimePicker: React.FC<{
     (_, i) => new Date().getFullYear() + i
   );
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
-  const days = Array.from({ length: 31 }, (_, i) => i + 1);
+  const days = Array.from(
+    { length: daysInMonth(value.getFullYear(), value.getMonth()) },
+    (_, i) => i + 1
+  );
   const hours = Array.from({ length: 24 }, (_, i) => i);
   const minutes = Array.from({ length: 60 }, (_, i) => i);
 
-  const handleChange = (field: string, val: number) => {
-    const newDate = new Date(value);
-    switch (field) {
-      case "year":
-        newDate.setFullYear(val);
-        break;
-      case "month":
-        newDate.setMonth(val - 1);
-        break;
-      case "day":
-        newDate.setDate(val);
-        break;
-      case "hour":
-        newDate.setHours(val);
-        break;
-      case "minute":
-        newDate.setMinutes(val);
-        break;
-    }
-    onChange(newDate);
-  };
+  const handleChange = (field: DateField, val: number) =>
+    onChange(setDateField(value, field, val));
 
   return (
     <div className="flex justify-center gap-2">

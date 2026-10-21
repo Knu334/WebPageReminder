@@ -2,7 +2,7 @@
 
 作成日: 2026-10-19。Codex の review（同日、3回）を反映。
 
-要件の行の先頭の `[R-<領域>-<番号>]` は要件 ID である（領域: SCOPE 範囲、MAN manifest、CFG 設定、STO storage、GEN 世代と直列化、LOGIN、TOKEN getAccessToken、REFRESH、LOGOUT、STATUS、API API client、WRITE 書き込みの手順、SYNC 一覧の同期、DTO 変換、CRUD 作成と削除、ALARM alarm と通知、MSG message、UI 設定画面、ERR error の表示、LOG log）。自動テストは名前にこの ID を含め、`docs/test-traceability.md`（要件とテストの対応表）は `npm run trace` で ID とテストの名前から生成する。ID は製品の動作の要件だけに付け、文書や作業手順の成果物には付けない。ID は付け直さず、消した ID の番号も再利用しない（番号の欠けは想定どおり）。要件を足す時は領域の末尾の次の番号を使う。
+要件の行の先頭の `[R-<領域>-<番号>]` は要件 ID である（領域: SCOPE 範囲、MAN manifest、CFG 設定、STO storage、GEN 世代と直列化、LOGIN、TOKEN getAccessToken、REFRESH、LOGOUT、STATUS、API API client、WRITE 書き込みの手順、SYNC 一覧の同期、DTO 変換、CRUD 作成と削除、ALARM alarm と通知、MSG message、UI 設定画面、PICK 日時の入力、ERR error の表示、LOG log）。自動テストは名前にこの ID を含め、`docs/test-traceability.md`（要件とテストの対応表）は `npm run trace` で ID とテストの名前から生成する。ID は製品の動作の要件だけに付け、文書や作業手順の成果物には付けない。ID は付け直さず、消した ID の番号も再利用しない（番号の欠けは想定どおり）。要件を足す時は領域の末尾の次の番号を使う。
 
 ## 目的
 
@@ -44,7 +44,7 @@ reminder-server が旧 API（`POST/PUT /reminders`、body の `key` で識別、
 
 含めない（別の PR）:
 
-- `ReminderList` の sort の比較、background の `openedReminders`、`DateTimePicker` の日の繰り上がり、build 用 tool の脆弱性、eslint の globals、`popup.html` の title。
+- `ReminderList` の sort の比較、background の `openedReminders`、build 用 tool の脆弱性、`popup.html` の title。
 - 実 AWS と Chrome での受け入れ確認（handoff の作業6）。operator と行う。
 
 ## 構成
@@ -300,6 +300,12 @@ message:
   - [R-UI-04] 「保存」ボタン: 「設定」の節の手順。検証の error は欄の下に出す。
   - [R-UI-05] 状態: 未設定 / 許可なし（「許可する」ボタン）/ 未ログイン / ログイン中 / 要再ログイン / ログイン処理中 / 失効は未完了。
   - [R-UI-06] 「ログイン」/「ログアウト」ボタン。
+
+## 日時の入力（`DateTimePicker.tsx`）
+
+- [R-PICK-01] 年・月を変えて、その月に無い日になる時は月末にする（1/31 で2月を選ぶと 2/28。翌月に繰り上げない）。時・分は変えない。
+- [R-PICK-02] 日の選択肢は、選んでいる年・月の日数だけにする。
+- [R-PICK-03] YouTube の配信予定の「M月D日 H:MM」は、今年のその日時（秒は0）として読む。月と日は一度に設定し、今日の日付から繰り上げない。存在しない日時は読まない。
 
 ## error の表示
 

@@ -44,7 +44,7 @@ reminder-server が旧 API（`POST/PUT /reminders`、body の `key` で識別、
 
 含めない（別の PR）:
 
-- `ReminderList` の sort の比較、background の `openedReminders`、`App.tsx` の DOM の直接操作、`DateTimePicker` の日の繰り上がり、build 用 tool の脆弱性、eslint の globals、`popup.html` の title。
+- `ReminderList` の sort の比較、background の `openedReminders`、`App.tsx` の DOM の直接操作、`DateTimePicker` の日の繰り上がり、build 用 tool の脆弱性、`popup.html` の title。
 - 実 AWS と Chrome での受け入れ確認（handoff の作業6）。operator と行う。
 
 ## 構成

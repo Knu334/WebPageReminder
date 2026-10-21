@@ -120,6 +120,7 @@ export const ServerSettings: React.FC<{
           <Label htmlFor={key}>{label}</Label>
           <Input
             id={key}
+            className="mt-1"
             value={input[key]}
             onChange={(e) => setInput((cur) => ({ ...cur, [key]: e.target.value }))}
           />

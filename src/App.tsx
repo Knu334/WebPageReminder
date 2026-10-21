@@ -213,7 +213,7 @@ function App() {
   };
 
   return (
-    <Tabs defaultValue="reminders" className="w-root m-4 space-y-6">
+    <Tabs defaultValue="reminders" className="w-root m-4">
       <TabsList className="w-full">
         <TabsTrigger value="reminders" className="w-full">
           Reminders
@@ -222,8 +222,8 @@ function App() {
           Settings
         </TabsTrigger>
       </TabsList>
-      <TabsContent value="reminders">
-        <div className="space-y-6">
+      <TabsContent value="reminders" className="mt-6">
+        <div>
           <div className="space-y-4">
             <DateTimePicker
               value={reminderTime}
@@ -239,7 +239,7 @@ function App() {
 
           {error && <Label className="text-red-500">{error}</Label>}
 
-          <div className="space-y-4 grid justify-center">
+          <div className="mt-6 space-y-4 grid justify-center">
             <h2 className="text-lg font-semibold">Reminders</h2>
             <ReminderList
               reminders={reminders}
@@ -249,7 +249,7 @@ function App() {
           </div>
         </div>
       </TabsContent>
-      <TabsContent value="settings">
+      <TabsContent value="settings" className="mt-6">
         <div className="space-y-2">
           <h2 className="text-lg font-semibold">Settings</h2>
           <Settings

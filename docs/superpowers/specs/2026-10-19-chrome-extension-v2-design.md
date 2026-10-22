@@ -78,6 +78,7 @@ interface SettingsType {
   autoOpen: boolean;
   webPush: boolean;
   connectionType: "local" | "server";
+  theme: "system" | "light" | "dark";
   apiBaseUrl: string;   // https://<api-id>.execute-api.<region>.amazonaws.com
   authBaseUrl: string;  // https://<prefix>.auth.<region>.amazoncognito.com
   clientId: string;
@@ -93,7 +94,7 @@ interface SettingsType {
   3. [R-CFG-05] popup が3つの origin（`<origin>/*`）を `chrome.permissions.request` で求める。
 - [R-CFG-06] 許可の dialog で popup が閉じても、設定は保存済みである。popup を開くたびに `chrome.permissions.contains` で確かめ、許可が無ければ状態欄に「許可する」ボタン（`chrome.permissions.request` を呼ぶ）を出す。
 - [R-CFG-07] 2の途中で worker が止まった場合に備え、認証状態と cache は読むたびに `configKey` を今の設定と照合し、違えば使わずに消す。
-- [R-CFG-08] 入力中の4項目は `Settings` component の state に置き、「保存」まで storage に書かない。Auto-open と Web Push は、今の storage の値にその field だけを上書きして即保存する（入力中の接続先を巻き込まない）。
+- [R-CFG-08] 入力中の4項目は `Settings` component の state に置き、「保存」まで storage に書かない。Auto-open、Web Push、Theme は、今の storage の値にその field だけを上書きして即保存する（入力中の接続先を巻き込まない）。
 - [R-CFG-09] Connection Type の切り替えは background に `mode/change` を送る。background は queue の中で、保存、`authGen` の更新（進行中の旧モードの処理を無効にする）、`chrome.alarms.clearAll()` の `await`、切り替え先のモードの一覧（local の `reminders` か `serverCache`）からの alarm の再構築を行う。
 
 ### storage
@@ -300,6 +301,7 @@ message:
   - [R-UI-04] 「保存」ボタン: 「設定」の節の手順。検証の error は欄の下に出す。
   - [R-UI-05] 状態: 未設定 / 許可なし（「許可する」ボタン）/ 未ログイン / ログイン中 / 要再ログイン / ログイン処理中 / 失効は未完了。
   - [R-UI-06] 「ログイン」/「ログアウト」ボタン。
+- [R-UI-07] Connection Type の次に Theme（System / Light / Dark）のラジオボタンを置く。既定は System で、OS の設定（`prefers-color-scheme`）に従い、popup を開いている間の切り替えにも追従する。storage の値が3つのどれでもなければ System とする。popup は描画の前に設定を読んでテーマを当てる。
 
 ## 日時の入力（`DateTimePicker.tsx`）
 

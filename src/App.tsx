@@ -10,6 +10,7 @@ import {
 } from "@/utils/ReminderUtils";
 import { NO_DATA } from "./utils/nodataUtils";
 import { loadSettings } from "@/utils/config";
+import { setTheme } from "@/utils/theme";
 import { makeCall } from "@/utils/bg";
 import { canvasHalve, shrinkToLimit } from "@/utils/image";
 import { parseYouTubeTime } from "@/utils/date";
@@ -32,7 +33,8 @@ function App() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [settings, setSettings] = useState<SettingsType>(DEFAULT_SETTINGS);
   const [error, setError] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
+  // 設定と一覧を読み終えるまで作成させない（既定の local のまま保存しない）
+  const [loading, setLoading] = useState(true);
   // 切断（NETWORK）の後、次の操作の前に一覧を読み直す（認証の状態は ServerSettings が読む）
   const needsReload = useRef(false);
 
@@ -48,12 +50,12 @@ function App() {
 
   // 同期前の一覧が作成・削除の表示を上書きしないよう、同期の応答まで一覧を出さず作成もさせない
   const loadServerList = async () => {
-    setSyncing(true);
+    setLoading(true);
     setReminders([]);
     try {
       showList(await call<ListRes>({ type: "reminders/list", fresh: true }));
     } finally {
-      setSyncing(false);
+      setLoading(false);
     }
   };
 
@@ -101,10 +103,14 @@ function App() {
   // 開いた時に一度だけ: 設定と一覧（server は fresh）を読む
   useEffect(() => {
     (async () => {
-      const s = await loadSettings();
-      setSettings(s);
-      if (s.connectionType === "server") await loadServerList();
-      else await loadLocalList();
+      try {
+        const s = await loadSettings();
+        setSettings(s);
+        if (s.connectionType === "server") await loadServerList();
+        else await loadLocalList();
+      } finally {
+        setLoading(false);
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -197,8 +203,9 @@ function App() {
   };
 
   // storage の今の値にその field だけを重ねる（background が保存した接続先を巻き込まない）
-  const handleSettingsChange = async (patch: Partial<Pick<SettingsType, "autoOpen" | "webPush">>) => {
+  const handleSettingsChange = async (patch: Partial<Pick<SettingsType, "autoOpen" | "webPush" | "theme">>) => {
     setSettings((cur) => ({ ...cur, ...patch }));
+    if (patch.theme) setTheme(patch.theme);
     const s = await loadSettings();
     await chrome.storage.local.set({ settings: { ...s, ...patch } });
   };
@@ -240,7 +247,7 @@ function App() {
                 setError(null);
               }}
             />
-            <Button onClick={handleAddReminder} disabled={syncing} className="w-full">
+            <Button onClick={handleAddReminder} disabled={loading} className="w-full">
               Create Reminder
             </Button>
           </div>
@@ -249,7 +256,7 @@ function App() {
 
           <div className="mt-6 space-y-4 grid justify-center">
             <h2 className="text-lg font-semibold">Reminders</h2>
-            {syncing ? (
+            {loading ? (
               <div className="flex justify-center py-8 text-gray-500" role="status" aria-label="Syncing">
                 <Loader2 className="h-12 w-12 animate-spin" />
               </div>

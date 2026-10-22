@@ -58,6 +58,7 @@ export const DEFAULT_SETTINGS = {
   autoOpen: true,
   webPush: false,
   connectionType: "local",
+  theme: "system",
   apiBaseUrl: "",
   authBaseUrl: "",
   clientId: "",

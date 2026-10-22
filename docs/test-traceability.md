@@ -39,10 +39,10 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 
 | 項目 | 数 |
 | --- | --- |
-| 要件 | 160 |
-| テストのある要件 | 145 |
+| 要件 | 161 |
+| テストのある要件 | 146 |
 | テストの無い要件 | 15 |
-| テスト | 195 |
+| テスト | 196 |
 | 要件 ID の無いテスト | 0 |
 
 ## 要件ごとのテスト
@@ -74,7 +74,7 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | R-CFG-05 | popup が3つの origin（&lt;origin&gt;/\*）を chrome.permissions.request で求める。 | [config.test.ts](../src/utils/config.test.ts) › config › key and patterns |
 | R-CFG-06 | 許可の dialog で popup が閉じても、設定は保存済みである。popup を開くたびに chrome.permissions.contains で確かめ、許可が無ければ状態欄に「許可する」ボタン（chrome.permissio… | — |
 | R-CFG-07 | 2の途中で worker が止まった場合に備え、認証状態と cache は読むたびに configKey を今の設定と照合し、違えば使わずに消す。 | [auth.refresh.test.ts](../src/background/auth.refresh.test.ts) › configKey が違う認証状態は使わずに消す<br>[cache.test.ts](../src/background/cache.test.ts) › readCache: configKey が違う cache は空になり消える |
-| R-CFG-08 | 入力中の4項目は Settings component の state に置き、「保存」まで storage に書かない。Auto-open と Web Push は、今の storage の値にその field だけを上書きして即保存す… | — |
+| R-CFG-08 | 入力中の4項目は Settings component の state に置き、「保存」まで storage に書かない。Auto-open、Web Push、Theme は、今の storage の値にその field だけを上書きして… | — |
 | R-CFG-09 | Connection Type の切り替えは background に mode/change を送る。background は queue の中で、保存、authGen の更新（進行中の旧モードの処理を無効にする）、chrome.ala… | [messages.test.ts](../src/background/messages.test.ts) › mode/change の後に古いモードの alarm が残らない<br>[messages.test.ts](../src/background/messages.test.ts) › 進行中の server の同期が、切り替えた後の local の alarm を上書きしない |
 
 ### storage
@@ -281,6 +281,7 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | R-UI-04 | 「保存」ボタン: 「設定」の節の手順。検証の error は欄の下に出す。 | — |
 | R-UI-05 | 状態: 未設定 / 許可なし（「許可する」ボタン）/ 未ログイン / ログイン中 / 要再ログイン / ログイン処理中 / 失効は未完了。 | — |
 | R-UI-06 | 「ログイン」/「ログアウト」ボタン。 | — |
+| R-UI-07 | Connection Type の次に Theme（System / Light / Dark）のラジオボタンを置く。既定は System で、OS の設定（prefers-color-scheme）に従い、popup を開いている間の切… | [config.test.ts](../src/utils/config.test.ts) › config › loadSettings keeps light/dark and falls back to system |
 
 ### 日時の入力（DateTimePicker.tsx）
 

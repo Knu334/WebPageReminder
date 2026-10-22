@@ -152,7 +152,7 @@ it("R-MSG-04 R-CFG-04: config/save は4項目だけを保存し、他の field �
   expect(parsed).toEqual({ kind: "ok", msg: { type: "config/save", config: CFG2 } });
   // parseMessage を通らない入力でも同じ
   await m.handleMessage({ type: "config/save", config } as unknown as Parameters<typeof m.handleMessage>[0]);
-  expect(local().settings).toEqual({ autoOpen: true, webPush: false, connectionType: "server", ...CFG2 });
+  expect(local().settings).toEqual({ autoOpen: true, webPush: false, connectionType: "server", theme: "system", ...CFG2 });
 });
 
 it("R-MSG-04 R-CFG-04: config/save で接続先が変わらなければ消さない", async () => {

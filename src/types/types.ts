@@ -11,11 +11,13 @@ export interface Reminder {
 }
 
 export type ConnectionType = "local" | "server";
+export type Theme = "system" | "light" | "dark";
 
 export interface SettingsType {
   autoOpen: boolean;
   webPush: boolean;
   connectionType: ConnectionType;
+  theme: Theme;
   apiBaseUrl: string;
   authBaseUrl: string;
   clientId: string;

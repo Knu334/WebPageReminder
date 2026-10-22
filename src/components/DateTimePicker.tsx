@@ -28,7 +28,7 @@ export const DateTimePicker: React.FC<{
     onChange(setDateField(value, field, val));
 
   return (
-    <div className="flex justify-center gap-2">
+    <div className="flex justify-center gap-2 *:flex-1">
       <Select
         value={value.getFullYear().toString()}
         onValueChange={(val) => handleChange("year", Number(val))}

@@ -44,5 +44,6 @@ export const loadSettings = async (): Promise<SettingsType> => {
     if (typeof stored[k] === typeof DEFAULT_SETTINGS[k]) out[k] = stored[k];
   }
   if (out.connectionType !== "server") out.connectionType = "local";
+  if (out.theme !== "light" && out.theme !== "dark") out.theme = "system";
   return out as unknown as SettingsType;
 };

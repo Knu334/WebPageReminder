@@ -26,4 +26,10 @@ describe("config", () => {
   it("R-STO-05: loadSettings defaults when empty", async () => {
     expect((await loadSettings()).connectionType).toBe("local");
   });
+  it("R-UI-07: loadSettings keeps light/dark and falls back to system", async () => {
+    await chrome.storage.local.set({ settings: { theme: "light" } });
+    expect((await loadSettings()).theme).toBe("light");
+    await chrome.storage.local.set({ settings: { theme: "blue" } });
+    expect((await loadSettings()).theme).toBe("system");
+  });
 });

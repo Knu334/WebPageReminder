@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { DateTimePicker } from "@/components/DateTimePicker";
 import { Settings } from "@/components/Settings";
 import { ReminderList } from "@/components/ReminderList";
@@ -6,21 +6,72 @@ import {
   captureVisibleTab,
   createZeroSecCurrentDate,
   DEFAULT_SETTINGS,
-  ReminderUtils,
   removeOldReminders,
 } from "@/utils/ReminderUtils";
-import { NO_DATA, resetAlerm } from "./utils/nodataUtils";
-import { Reminder, SettingsType } from "@/types/types";
+import { NO_DATA } from "./utils/nodataUtils";
+import { loadSettings } from "@/utils/config";
+import { setTheme } from "@/utils/theme";
+import { makeCall } from "@/utils/bg";
+import { canvasHalve, shrinkToLimit } from "@/utils/image";
+import { parseYouTubeTime } from "@/utils/date";
+import { ConnectionType, Fail, Reminder, ServerConfig, SettingsType } from "@/types/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
 
 import "@/App.css";
+
+type Ok = { ok: true };
+type ListRes = { ok: true; reminders: Reminder[] } | (Fail & { reminders: Reminder[] });
+
+const withNoData = (list: Reminder[]): Reminder[] =>
+  list.some((r) => !r.hidden && r.id !== NO_DATA.id) ? list.filter((r) => r.id !== NO_DATA.id) : [...list.filter((r) => r.id !== NO_DATA.id), NO_DATA];
 
 function App() {
   const [reminderTime, setReminderTime] = useState(createZeroSecCurrentDate);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [settings, setSettings] = useState<SettingsType>(DEFAULT_SETTINGS);
+  const [error, setError] = useState<string | null>(null);
+  // 設定と一覧を読み終えるまで作成させない（既定の local のまま保存しない）
+  const [loading, setLoading] = useState(true);
+  // 切断（NETWORK）の後、次の操作の前に一覧を読み直す（認証の状態は ServerSettings が読む）
+  const needsReload = useRef(false);
+
+  const markDisconnected = () => {
+    needsReload.current = true;
+  };
+
+  const call = makeCall(setError, markDisconnected);
+
+  const showList = (r: ListRes | Fail) => {
+    if ("reminders" in r) setReminders(withNoData(r.reminders));
+  };
+
+  // 同期前の一覧が作成・削除の表示を上書きしないよう、同期の応答まで一覧を出さず作成もさせない
+  const loadServerList = async () => {
+    setLoading(true);
+    setReminders([]);
+    try {
+      showList(await call<ListRes>({ type: "reminders/list", fresh: true }));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadLocalList = async () => {
+    const { reminders: stored } = await chrome.storage.local.get("reminders");
+    const list = removeOldReminders(Array.isArray(stored) ? stored : []);
+    await chrome.storage.local.set({ reminders: list });
+    setReminders(withNoData(list));
+    await call<Ok>({ type: "alarms/reset" });
+  };
+
+  const ensureFresh = async () => {
+    if (!needsReload.current) return;
+    needsReload.current = false;
+    if (settings.connectionType === "server") showList(await call<ListRes>({ type: "reminders/list", fresh: true }));
+  };
 
   useEffect(() => {
     (async () => {
@@ -40,70 +91,33 @@ function App() {
               return el ? el.innerText : null;
             },
           });
-          if (ytTimeElement && ytTimeElement.result) {
-            const ytTimeGroup =
-              /^(\d+)月(\d+)日 (\d+):(\d+)$/.exec(ytTimeElement.result) || [];
-            if (ytTimeGroup.length == 5) {
-              const ytTimeArray = ytTimeGroup
-                .slice(1)
-                .map((p) => parseInt(p, 10));
-              const ytTime = new Date();
-              ytTime.setMonth(ytTimeArray[0] - 1);
-              ytTime.setDate(ytTimeArray[1]);
-              ytTime.setHours(ytTimeArray[2]);
-              ytTime.setMinutes(ytTimeArray[3]);
-              ytTime.setSeconds(0);
-              ytTime.setMilliseconds(0);
-              setReminderTime(ytTime);
-            }
-          }
+          const ytTime = ytTimeElement?.result
+            ? parseYouTubeTime(ytTimeElement.result, new Date())
+            : null;
+          if (ytTime) setReminderTime(ytTime);
         }
       }
     })();
   }, []);
 
+  // 開いた時に一度だけ: 設定と一覧（server は fresh）を読む
   useEffect(() => {
     (async () => {
-      const storage = chrome.storage
-        ? await chrome.storage.local.get(["settings", "reminders"])
-        : {};
-      let localSettings: SettingsType = storage.settings || DEFAULT_SETTINGS;
-      if (localSettings) setSettings(localSettings);
-
-      if (!chrome.storage) {
-        setSettings({ ...localSettings, connectionType: "server" });
+      try {
+        const s = await loadSettings();
+        setSettings(s);
+        if (s.connectionType === "server") await loadServerList();
+        else await loadLocalList();
+      } finally {
+        setLoading(false);
       }
-
-      let storageReminders: Reminder[] = [];
-      if (localSettings.connectionType === "server" || !chrome.storage) {
-        try {
-          const utils = new ReminderUtils(localSettings.url);
-          storageReminders = await utils.getRemoteReminders();
-          storageReminders = removeOldReminders(storageReminders);
-          utils.setRemoteReminders(storageReminders);
-        } catch (error) {
-          if (chrome.storage) {
-            storageReminders = storage.reminders || [];
-            localSettings = { ...localSettings, connectionType: "local" };
-            setSettings(localSettings);
-            chrome.storage.local.set({ settings: localSettings });
-          }
-          console.log(error);
-        }
-      } else if (chrome.storage) {
-        storageReminders = storage.reminders || [];
-        storageReminders = removeOldReminders(storageReminders);
-        chrome.storage.local.set({ reminders: storageReminders });
-      }
-      if (storageReminders.filter((r) => !r.hidden).length === 0) {
-        storageReminders.push(NO_DATA);
-      }
-      setReminders(storageReminders);
-      resetAlerm(storageReminders);
     })();
-  }, [settings.connectionType]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleAddReminder = async () => {
+    setError(null);
+    await ensureFresh();
     let tab;
     if (chrome.tabs) {
       [tab] = await chrome.tabs.query({
@@ -116,14 +130,7 @@ function App() {
     if (!tab.url || !tab.title) return;
 
     if (reminderTime.getTime() <= Date.now()) {
-      console.log("Past date cannot be set.");
-      const status = document.getElementById("status");
-      if (status) {
-        status.hidden = false;
-        setTimeout(() => {
-          status.hidden = true;
-        }, 3000);
-      }
+      setError("Past date cannot be set.");
       return;
     }
 
@@ -131,11 +138,20 @@ function App() {
       return;
     }
 
+    const server = settings.connectionType === "server";
+    const capture = await captureVisibleTab();
+    // capture の失敗は NO_DATA の path のまま。縮められなければ画像なし
+    const thumbnail = !capture
+      ? NO_DATA.thumbnail
+      : !server
+        ? capture
+        : ((await shrinkToLimit(capture, canvasHalve).catch(() => null)) ?? NO_DATA.thumbnail);
+
     const reminder: Reminder = {
       id: crypto.randomUUID(),
       url: tab.url,
       title: tab.title,
-      thumbnail: (await captureVisibleTab()) || NO_DATA.thumbnail,
+      thumbnail,
       reminderTime: reminderTime.toISOString(),
       autoOpen: settings.autoOpen,
       webPush: settings.webPush,
@@ -143,62 +159,76 @@ function App() {
       hidden: false,
     };
 
-    let newReminders;
-    const activeReminders = reminders.filter((r) => !r.hidden);
-    if (activeReminders.length === 1 && activeReminders[0].id === NO_DATA.id) {
-      newReminders = [reminder];
-    } else {
-      newReminders = [...reminders, reminder];
+    if (server) {
+      setReminders((cur) => withNoData([...cur, reminder]));
+      const r = await call<{ ok: true; reminder: Reminder }>({ type: "reminders/create", reminder });
+      if (!r.ok) setReminders((cur) => withNoData(cur.filter((x) => x.id !== reminder.id)));
+      return;
     }
+    const newReminders = [...reminders.filter((r) => r.id !== NO_DATA.id), reminder];
     setReminders(newReminders);
-    if (settings.connectionType === "server" || !chrome.storage) {
-      const utils = new ReminderUtils(settings.url);
-      utils.setRemoteReminders(newReminders);
-    } else {
-      chrome.storage.local.set({ reminders: newReminders });
-    }
-
-    // Set up alarm for the reminder
-    if (chrome.alarms) {
-      chrome.alarms.create(reminder.id, {
-        when: reminderTime.getTime(),
-      });
-    }
+    await chrome.storage.local.set({ reminders: newReminders });
+    await call<Ok>({ type: "alarms/reset" });
   };
 
-  const handleDeleteReminder = (id: string) => {
-    const newReminders = reminders.filter((r) => r.id !== id);
-    if (settings.connectionType === "server" || !chrome.storage) {
-      const utils = new ReminderUtils(settings.url);
-      utils.setRemoteReminders(newReminders);
-    } else {
-      chrome.storage.local.set({ reminders: newReminders });
-    }
+  const handleDeleteReminder = async (id: string) => {
+    setError(null);
+    await ensureFresh();
 
-    const activeReminders = newReminders.filter((r) => !r.hidden);
-    if (activeReminders.length === 0) {
-      newReminders.push(NO_DATA);
+    if (settings.connectionType === "server") {
+      // ensureFresh が一覧を置き換えている場合があるので、閉包の reminders ではなく cur から消す
+      let removed: Reminder | undefined;
+      setReminders((cur) => {
+        removed = cur.find((x) => x.id === id) ?? removed;
+        return withNoData(cur.filter((x) => x.id !== id));
+      });
+      const r = await call<Ok>({ type: "reminders/delete", id });
+      if (r.ok) return;
+      if (r.code === "CONFLICT") showList(await call<ListRes>({ type: "reminders/list", fresh: true }));
+      else if (removed) {
+        const back = removed;
+        setReminders((cur) => withNoData([...cur.filter((x) => x.id !== id), back]));
+      }
+      return;
     }
-    setReminders(newReminders);
-
-    if (chrome.alarms) {
-      chrome.alarms.clear(id);
-    }
+    // local モードでは ensureFresh は一覧を書き換えないので、閉包の reminders は古くならない
+    const newReminders = reminders.filter((r) => r.id !== id && r.id !== NO_DATA.id);
+    setReminders(withNoData(newReminders));
+    await chrome.storage.local.set({ reminders: newReminders });
+    await call<Ok>({ type: "alarms/reset" });
   };
 
   const handleOpenReminder = (url: string) => {
     chrome.tabs.create({ url });
   };
 
-  const handleSettingsChange = (newSettings: SettingsType) => {
-    setSettings(newSettings);
-    if (chrome.storage) {
-      chrome.storage.local.set({ settings: newSettings });
-    }
+  // storage の今の値にその field だけを重ねる（background が保存した接続先を巻き込まない）
+  const handleSettingsChange = async (patch: Partial<Pick<SettingsType, "autoOpen" | "webPush" | "theme">>) => {
+    setSettings((cur) => ({ ...cur, ...patch }));
+    if (patch.theme) setTheme(patch.theme);
+    const s = await loadSettings();
+    await chrome.storage.local.set({ settings: { ...s, ...patch } });
+  };
+
+  const handleModeChange = async (connectionType: ConnectionType) => {
+    if (connectionType === settings.connectionType) return;
+    setError(null);
+    await ensureFresh();
+    const r = await call<Ok>({ type: "mode/change", connectionType });
+    if (!r.ok) return;
+    setSettings((cur) => ({ ...cur, connectionType }));
+    if (connectionType === "server") await loadServerList();
+    else await loadLocalList();
+  };
+
+  // 接続先が変わると background が cache を消すので、一覧も読み直す
+  const handleSaved = async (c: ServerConfig) => {
+    setSettings((cur) => ({ ...cur, ...c }));
+    showList(await call<ListRes>({ type: "reminders/list" }));
   };
 
   return (
-    <Tabs defaultValue="reminders" className="w-root m-4 space-y-6">
+    <Tabs defaultValue="reminders" className="w-root m-4">
       <TabsList className="w-full">
         <TabsTrigger value="reminders" className="w-full">
           Reminders
@@ -207,35 +237,49 @@ function App() {
           Settings
         </TabsTrigger>
       </TabsList>
-      <TabsContent value="reminders">
-        <div className="space-y-6">
+      <TabsContent value="reminders" className="mt-6">
+        <div>
           <div className="space-y-4">
-            <DateTimePicker value={reminderTime} onChange={setReminderTime} />
-            <Button onClick={handleAddReminder} className="w-full">
+            <DateTimePicker
+              value={reminderTime}
+              onChange={(d) => {
+                setReminderTime(d);
+                setError(null);
+              }}
+            />
+            <Button onClick={handleAddReminder} disabled={loading} className="w-full">
               Create Reminder
             </Button>
           </div>
 
-          <Label id="status" className="text-red-500" hidden={true}>
-            Past date cannot be set.
-          </Label>
+          {error && <Label className="text-red-500">{error}</Label>}
 
-          <div className="space-y-4 grid justify-center">
+          <div className="mt-6 space-y-4 grid justify-center">
             <h2 className="text-lg font-semibold">Reminders</h2>
-            <ReminderList
-              reminders={reminders}
-              onDelete={handleDeleteReminder}
-              onOpen={handleOpenReminder}
-            />
+            {loading ? (
+              <div className="flex justify-center py-8 text-gray-500" role="status" aria-label="Syncing">
+                <Loader2 className="h-12 w-12 animate-spin" />
+              </div>
+            ) : (
+              <ReminderList
+                reminders={reminders}
+                onDelete={handleDeleteReminder}
+                onOpen={handleOpenReminder}
+              />
+            )}
           </div>
         </div>
       </TabsContent>
-      <TabsContent value="settings">
+      <TabsContent value="settings" className="mt-6">
         <div className="space-y-2">
           <h2 className="text-lg font-semibold">Settings</h2>
           <Settings
             settings={settings}
             onSettingsChange={handleSettingsChange}
+            onModeChange={handleModeChange}
+            onSaved={handleSaved}
+            markDisconnected={markDisconnected}
+            ensureFresh={ensureFresh}
           />
         </div>
       </TabsContent>

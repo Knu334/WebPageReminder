@@ -11,10 +11,13 @@
     "activeTab",
     "unlimitedStorage",
     "identity",
-    "identity.email",
     "scripting"
   ],
-  "host_permissions": ["<all_urls>"],
+  "optional_host_permissions": [
+    "https://*.amazonaws.com/*",
+    "https://*.amazoncognito.com/*"
+  ],
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6qpjr+QEOJcEiIy8Vk9kn1HRRnYnZFu1Boj8+Q43yLn7Picow0MXeecGbFxN3EmvVCfr0re4acud6Ej6yYKOaPCZg7CySRg+nyyhUr2whNwgTgwzABgZrXMJYymQQsLBoK6nmsplRLg4Kyi0KhLgZS7wRvyKskygSR/YoviydBt4BILwc7Db5iPLvws4YXjawRTPAHzC6nJtFvzlTNVmE6IiSTQAA5MvwFR9Ka5Dyk9cBF3wpIgKj05tKICV/N8y0Bc+lIMubM7f8L5RNI+XFxXm1gmcqOj08FL9vaO9EZy8/pe2Dm2jhjkpY42kFXbzfnZtzzsTw1KvGtpFrmEOmQIDAQAB",
   "background": {
     "service_worker": "assets/background.js"
   },

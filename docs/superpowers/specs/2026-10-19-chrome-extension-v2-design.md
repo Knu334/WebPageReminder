@@ -225,7 +225,7 @@ message:
 
 - [R-SYNC-01] `reminders/list`（`fresh` 無し）: `serverCache` を `Reminder[]` に変換して返す。通信しない。
 - [R-SYNC-02] `reminders/list` `{fresh: true}`: `syncedAt` から60秒以内なら、同期せずに cache を返す。そうでなければ同期の完了か失敗まで待ち、1回だけ応答する。同期中に別の `fresh` が来たら、同じ同期を待つ（single-flight）。
-- [R-SYNC-03] popup は開いた時に、まず `fresh` 無しで呼んで表示し、続けて `fresh: true` で呼んで表示を更新する。popup が閉じても同期は background で続き、次に開いた時の cache に反映される。
+- [R-SYNC-03] popup は開いた時に `fresh: true` で呼び、応答が来てから一覧を表示する。応答までは作成のボタンを押せなくする（同期前の一覧が、同期中の作成・削除の表示を上書きしないため。一覧が無いので削除も押せない）。popup が閉じても同期は background で続き、次に開いた時の cache に反映される。
 
 同期の手順（queue の中で行う）:
 

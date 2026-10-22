@@ -204,7 +204,7 @@ CI（`.github/workflows/build.yml`）は build の前に `npm test` と `npm run
 | --- | --- | --- |
 | R-SYNC-01 | reminders/list（fresh 無し）: serverCache を Reminder[] に変換して返す。通信しない。 | [sync.list.test.ts](../src/background/sync.list.test.ts) › fresh でなければ通信しない |
 | R-SYNC-02 | reminders/list {fresh: true}: syncedAt から60秒以内なら、同期せずに cache を返す。そうでなければ同期の完了か失敗まで待ち、1回だけ応答する。同期中に別の fresh が来たら、同じ同期を待つ… | [sync.list.test.ts](../src/background/sync.list.test.ts) › 60秒以内は同期しない<br>[sync.list.test.ts](../src/background/sync.list.test.ts) › 同時の fresh は1回の同期 |
-| R-SYNC-03 | popup は開いた時に、まず fresh 無しで呼んで表示し、続けて fresh: true で呼んで表示を更新する。popup が閉じても同期は background で続き、次に開いた時の cache に反映される。 | — |
+| R-SYNC-03 | popup は開いた時に fresh: true で呼び、応答が来てから一覧を表示する。応答までは作成のボタンを押せなくする（同期前の一覧が、同期中の作成・削除の表示を上書きしないため。一覧が無いので削除も押せない）。popup が閉じて… | — |
 | R-SYNC-04 | listPage を直列に、nextCursor が null になるまで読む。items が空でも続ける。読み終わってから cache の items を全件置き換える（同期中の作成・削除は queue の後ろで待つので、巻き戻らない）。 | [sync.list.test.ts](../src/background/sync.list.test.ts) › 同期中の作成が全件置き換えで消えない（応答に含む: false）<br>[sync.list.test.ts](../src/background/sync.list.test.ts) › 同期中の作成が全件置き換えで消えない（応答に含む: true）<br>[sync.list.test.ts](../src/background/sync.list.test.ts) › 空の items で nextCursor が残る page を読み続ける |
 | R-SYNC-05 | 整理（1回の同期で、書き込みは合計30件まで。対象は毎回順番を混ぜて選び、失敗した項目が後続を止めないようにする。残りは次の同期）: | [sync.list.test.ts](../src/background/sync.list.test.ts) › pickRandom は重複なく n 件まで選ぶ<br>[sync.list.test.ts](../src/background/sync.list.test.ts) › 整理の1件の失敗が後続を止めない<br>[sync.list.test.ts](../src/background/sync.list.test.ts) › 整理は書き込み30件まで |
 | R-SYNC-06 | reminderTime が1か月より前の項目は、削除の手順で消す（PATCH はしない）。 | [sync.list.test.ts](../src/background/sync.list.test.ts) › 1か月より前は DELETE だけ |

@@ -17,6 +17,7 @@ import { ConnectionType, Fail, Reminder, ServerConfig, SettingsType } from "@/ty
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
 
 import "@/App.css";
 
@@ -31,6 +32,7 @@ function App() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [settings, setSettings] = useState<SettingsType>(DEFAULT_SETTINGS);
   const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
   // 切断（NETWORK）の後、次の操作の前に一覧を読み直す（認証の状態は ServerSettings が読む）
   const needsReload = useRef(false);
 
@@ -44,9 +46,15 @@ function App() {
     if ("reminders" in r) setReminders(withNoData(r.reminders));
   };
 
+  // 同期前の一覧が作成・削除の表示を上書きしないよう、同期の応答まで一覧を出さず作成もさせない
   const loadServerList = async () => {
-    showList(await call<ListRes>({ type: "reminders/list" }));
-    showList(await call<ListRes>({ type: "reminders/list", fresh: true }));
+    setSyncing(true);
+    setReminders([]);
+    try {
+      showList(await call<ListRes>({ type: "reminders/list", fresh: true }));
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const loadLocalList = async () => {
@@ -90,7 +98,7 @@ function App() {
     })();
   }, []);
 
-  // 開いた時に一度だけ: 設定と一覧（server は cache → fresh の2段）を読む
+  // 開いた時に一度だけ: 設定と一覧（server は fresh）を読む
   useEffect(() => {
     (async () => {
       const s = await loadSettings();
@@ -232,7 +240,7 @@ function App() {
                 setError(null);
               }}
             />
-            <Button onClick={handleAddReminder} className="w-full">
+            <Button onClick={handleAddReminder} disabled={syncing} className="w-full">
               Create Reminder
             </Button>
           </div>
@@ -241,11 +249,17 @@ function App() {
 
           <div className="mt-6 space-y-4 grid justify-center">
             <h2 className="text-lg font-semibold">Reminders</h2>
-            <ReminderList
-              reminders={reminders}
-              onDelete={handleDeleteReminder}
-              onOpen={handleOpenReminder}
-            />
+            {syncing ? (
+              <div className="flex justify-center py-8 text-gray-500" role="status" aria-label="Syncing">
+                <Loader2 className="h-12 w-12 animate-spin" />
+              </div>
+            ) : (
+              <ReminderList
+                reminders={reminders}
+                onDelete={handleDeleteReminder}
+                onOpen={handleOpenReminder}
+              />
+            )}
           </div>
         </div>
       </TabsContent>

@@ -12,19 +12,3 @@ export const NO_DATA = {
   createdAt: new Date().toISOString(),
   hidden: false,
 } as const satisfies Reminder;
-
-export const resetAlerm = (reminders: Reminder[]) => {
-  if (!chrome.alarms) return;
-
-  chrome.alarms.clearAll();
-  for (const r of reminders) {
-    if (r.id === NO_DATA.id) continue;
-
-    const reminderTime = new Date(r.reminderTime);
-    if (!r.hidden) {
-      chrome.alarms.create(r.id, {
-        when: reminderTime.getTime(),
-      });
-    }
-  }
-};
